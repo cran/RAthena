@@ -99,14 +99,9 @@ Athena_write_table <-
     }
 
     # writes out csv/tsv, uses data.table for extra speed
-    if (requireNamespace("data.table", quietly=TRUE)){
-      switch(file.type,
-             "csv" = data.table::fwrite(value, t),
-             "tsv" = data.table::fwrite(value, t, sep = "\t"))
-    } else {
-      switch(file.type,
-             "csv" = write.table(value, t, sep = ",", row.names = FALSE, quote=FALSE),
-             "tsv" = write.table(value, t, sep = "\t", row.names = FALSE, quote=FALSE))}
+    switch(file.type,
+           "csv" = data.table::fwrite(value, t, showProgress = F),
+           "tsv" = data.table::fwrite(value, t, sep = "\t", showProgress = F))
 
     found <- dbExistsTable(conn, Name)
     if (found && !overwrite && !append) {
@@ -310,7 +305,7 @@ createFields <- function(con, fields, field.types) {
   }
   
   field_names <- tolower(gsub("\\.", "_", make.names(names(fields), unique = TRUE)))
-  message("Info: data.frame names have been converted to align with Athena DDL naming convertions: \n",paste0(field_names, collapse= ",\n"))
+  message("Info: data.frame colnames have been converted to align with Athena DDL naming convertions: \n",paste0(field_names, collapse= ",\n"))
   field.types <- unname(fields)
   paste0(field_names, " ", field.types)
 }
