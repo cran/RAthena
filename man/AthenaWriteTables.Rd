@@ -11,17 +11,17 @@
 \S4method{dbWriteTable}{AthenaConnection,character,data.frame}(conn, name,
   value, overwrite = FALSE, append = FALSE, row.names = NA,
   field.types = NULL, partition = NULL, s3.location = NULL,
-  file.type = c("csv", "tsv", "parquet"), ...)
+  file.type = c("csv", "tsv", "parquet"), compress = FALSE, ...)
 
 \S4method{dbWriteTable}{AthenaConnection,Id,data.frame}(conn, name, value,
   overwrite = FALSE, append = FALSE, row.names = NA,
   field.types = NULL, partition = NULL, s3.location = NULL,
-  file.type = c("csv", "tsv", "parquet"), ...)
+  file.type = c("csv", "tsv", "parquet"), compress = FALSE, ...)
 
 \S4method{dbWriteTable}{AthenaConnection,SQL,data.frame}(conn, name, value,
   overwrite = FALSE, append = FALSE, row.names = NA,
   field.types = NULL, partition = NULL, s3.location = NULL,
-  file.type = c("csv", "tsv", "parquet"), ...)
+  file.type = c("csv", "tsv", "parquet"), compress = FALSE, ...)
 }
 \arguments{
 \item{conn}{An \code{\linkS4class{AthenaConnection}} object, produced by
@@ -54,10 +54,14 @@ For backward compatibility, \code{NULL} is equivalent to \code{FALSE}.}
 
 \item{partition}{Partition Athena table (needs to be a named list or vector) for example: \code{c(var1 = "2019-20-13")}}
 
-\item{s3.location}{s3 bucket to store Athena table, must be set as a s3 uri for example ("s3://mybucket/data/")}
+\item{s3.location}{s3 bucket to store Athena table, must be set as a s3 uri for example ("s3://mybucket/data/"). 
+By default s3.location is set s3 staging directory from \code{\linkS4class{AthenaConnection}} object.}
 
 \item{file.type}{What file type to store data.frame on s3, RAthena currently supports ["csv", "tsv", "parquet"].
 \strong{Note:} "parquet" format is supported by the \code{arrow} package and it will need to be installed to utilise the "parquet" format.}
+
+\item{compress}{\code{FALSE | TRUE} To determine if to compress file.type. If file type is ["csv", "tsv"] then "gzip" compression is used.
+Currently parquet compression isn't supported.}
 
 \item{...}{Other arguments used by individual methods.}
 }
@@ -96,6 +100,18 @@ dbListTables(con)
 
 # Checking if uploaded table exists in Athena
 dbExistsTable(con, "mtcars")
+
+# using default s3.location
+dbWriteTable(con, "iris", iris)
+
+# Read entire table from Athena
+dbReadTable(con, "iris")
+
+# List all tables in Athena after uploading new table to Athena
+dbListTables(con)
+
+# Checking if uploaded table exists in Athena
+dbExistsTable(con, "iris")
 
 # Disconnect from Athena
 dbDisconnect(con)

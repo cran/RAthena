@@ -1,3 +1,32 @@
+# RAthena 1.4.0
+Updated package version for cran release
+
+# RAthena 1.3.0.9001
+### Minor Change
+* `s3.location` parameter is `dbWriteTable` can now be made nullable
+
+### Backend Change
+* helper function `upload_data` has been rebuilt and removed the old "horrible" if statement with `paste` now the function relies on `sprintf` to construct the s3 location path. This method now is a lot clearer in how the s3 location is created plus it enables a `dbWriteTable` to be simplified. `dbWriteTable` can now upload data to the default s3_staging directory created in `dbConnect` this simplifies `dbWriteTable` to :
+```
+library(DBI)
+
+con <- dbConnect(RAthena::athena())
+
+dbWrite(con, "iris", iris)
+```
+### Bug Fix
+* Info message wasn't being return when colnames needed changing for Athena DDL
+
+### Unit Tests
+* `data transfer` test now tests compress, and default s3.location when transfering data
+
+# RAthena 1.3.0.9000
+### New Feature
+* GZIP compression is now supported for "csv" and "tsv" file format in `dbWriteTable`
+
+### Minor Change
+* `sqlCreateTable` info message will now only inform user if colnames have changed and display the colname that have changed
+
 # RAthena 1.3.0
 * Move from development version to CRAN publishing version
 
@@ -36,7 +65,7 @@
 * Created a helper function `work_group_config` and `work_group_config_update` to create config of work group
 * Added extra feature to get work group output location in connection function `AthenaConnection`
 * created `dbColumnInfo` method: returns data.frame containing `field_name` and `type`
-* Created helper function `time_check` to check how long is left on the Athena Connection, if less than 15 minutes a warning message is outputed to notify user
+* Created helper function `time_check` to check how long is left on the Athena Connection, if less than 15 minutes a warning message is outputted to notify user
 * Created s3 method for function `db_collect` for better integration with dplyr
 * Created s3 method for function `db_save_query` for better integration with dplyr
 * Created s3 method for function `db_copy_to` for better integration with dplyr

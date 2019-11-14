@@ -12,9 +12,12 @@
 #'   `TRUE` if `overwrite` is also `TRUE`.
 #' @param field.types Additional field types used to override derived types.
 #' @param partition Partition Athena table (needs to be a named list or vector) for example: \code{c(var1 = "2019-20-13")}
-#' @param s3.location s3 bucket to store Athena table, must be set as a s3 uri for example ("s3://mybucket/data/")
+#' @param s3.location s3 bucket to store Athena table, must be set as a s3 uri for example ("s3://mybucket/data/"). 
+#'        By default s3.location is set s3 staging directory from \code{\linkS4class{AthenaConnection}} object.
 #' @param file.type What file type to store data.frame on s3, RAthena currently supports ["csv", "tsv", "parquet"].
 #'                  \strong{Note:} "parquet" format is supported by the \code{arrow} package and it will need to be installed to utilise the "parquet" format.
+#' @param compress \code{FALSE | TRUE} To determine if to compress file.type. If file type is ["csv", "tsv"] then "gzip" compression is used.
+#'        Currently parquet compression isn't supported.
 #' @inheritParams DBI::sqlCreateTable
 #' @return \code{dbWriteTable()} returns \code{TRUE}, invisibly. If the table exists, and both append and overwrite
 #'         arguments are unset, or append = TRUE and the data frame with the new data has different column names,
@@ -47,6 +50,18 @@
 #' 
 #' # Checking if uploaded table exists in Athena
 #' dbExistsTable(con, "mtcars")
+#' 
+#' # using default s3.location
+#' dbWriteTable(con, "iris", iris)
+#' 
+#' # Read entire table from Athena
+#' dbReadTable(con, "iris")
+#'
+#' # List all tables in Athena after uploading new table to Athena
+#' dbListTables(con)
+#' 
+#' # Checking if uploaded table exists in Athena
+#' dbExistsTable(con, "iris")
 #'
 #' # Disconnect from Athena
 #' dbDisconnect(con)
@@ -57,19 +72,24 @@ NULL
 Athena_write_table <-
   function(conn, name, value, overwrite=FALSE, append=FALSE,
            row.names = NA, field.types = NULL, 
-           partition = NULL, s3.location = NULL, file.type = c("csv", "tsv", "parquet"), ...) {
+           partition = NULL, s3.location = NULL, file.type = c("csv", "tsv", "parquet"),
+           compress = FALSE, ...) {
     # variable checks
     stopifnot(is.character(name),
               is.data.frame(value),
               is.logical(overwrite),
               is.logical(append),
-              is.s3_uri(s3.location))
-    stopifnot(is.null(partition) || is.character(partition) || is.list(partition))
+              is.null(s3.location) || is.s3_uri(s3.location),
+              is.null(partition) || is.character(partition) || is.list(partition),
+              is.logical(compress))
 
     sapply(tolower(names(partition)), function(x){if(x %in% tolower(names(value))){
       stop("partition ", x, " is a variable in data.frame ", deparse(substitute(value)), call. = FALSE)}})
     
     file.type = match.arg(file.type)
+    
+    # use default s3_staging directory is s3.location isn't provided
+    if (is.null(s3.location)) s3.location <- conn@info$s3_staging
     
     # made everything lower case due to aws Athena issue: https://aws.amazon.com/premiumsupport/knowledge-center/athena-aws-glue-msck-repair-table/
     name <- tolower(name)
@@ -90,18 +110,21 @@ Athena_write_table <-
              if(!is.null(conn@info$expiration)) time_check(conn@info$expiration)})
 
     value <- sqlData(conn, value, row.names = row.names)
+    
+    # compress file
+    FileLocation <- paste(t, Compress(file.type, compress), sep =".")
 
     # check if arrow is installed before attempting to create parquet
     if(file.type == "parquet"){
       if(!requireNamespace("arrow", quietly=TRUE))
         stop("The package arrow is required for R to utilise Apache Arrow to create parquet files.", call. = FALSE)
-      else {arrow::write_parquet(value, t)}
+      else {arrow::write_parquet(value, FileLocation)}
     }
-
+    
     # writes out csv/tsv, uses data.table for extra speed
     switch(file.type,
-           "csv" = data.table::fwrite(value, t, showProgress = F),
-           "tsv" = data.table::fwrite(value, t, sep = "\t", showProgress = F))
+           "csv" = data.table::fwrite(value, FileLocation, showProgress = F),
+           "tsv" = data.table::fwrite(value, FileLocation, sep = "\t", showProgress = F))
 
     found <- dbExistsTable(conn, Name)
     if (found && !overwrite && !append) {
@@ -118,12 +141,14 @@ Athena_write_table <-
     }
 
     # send data over to s3 bucket
-    upload_data(conn, t, name, partition, s3.location, file.type)
+    upload_data(conn, FileLocation, name, partition, s3.location, file.type, compress)
     
     if (!append) {
       sql <- sqlCreateTable(conn, Name, value, field.types = field.types, 
                             partition = names(partition),
-                            s3.location = s3.location, file.type = file.type)
+                            s3.location = s3.location, file.type = file.type,
+                            compress = compress)
+      
       # create Athena table
       rs <- dbExecute(conn, sql)
       dbClearResult(rs)}
@@ -136,20 +161,29 @@ Athena_write_table <-
   }
 
 # send data to s3 is Athena registered location
-upload_data <- function(con, x, name, partition = NULL, s3.location= NULL,  file.type = NULL) {
+upload_data <- function(con, x, name, partition = NULL, s3.location= NULL,  file.type = NULL, compress = NULL) {
+  # formatting s3 partitions
   partition <- unlist(partition)
   partition <- paste(names(partition), unname(partition), sep = "=", collapse = "/")
+  if (partition != "") partition <- paste0(partition, "/")
   
-  Name <- paste0(name, ".", file.type)
+  # s3_file name
+  FileType <- if(compress) Compress(file.type, compress) else file.type
+  FileName <- paste(name, FileType, sep = ".")
+  
+  # s3 bucket and key split
   s3_info <- split_s3_uri(s3.location)
   s3_info$key <- gsub("/$", "", s3_info$key)
-  if(grepl(name, s3_info$key)){s3_info$key <- gsub(name, "", s3_info$key)
-  s3_info$key <- gsub( "|/$", "", s3_info$key)}
+  split_key <- unlist(strsplit(s3_info$key,"/"))
   
-  if(s3_info$key != "" && partition == ""){s3_key <- paste(s3_info$key,name, Name, sep = "/")}
-  else if (s3_info$key == "" && partition != "") {s3_key <- paste(name, partition, Name, sep = "/")}
-  else if (s3_info$key == "" && partition == "") {s3_key <- paste(name, Name, sep = "/")}
-  else {s3_key <- paste(s3_info$key, name, partition, Name, sep = "/")}
+  if(split_key[length(split_key)] == name || length(split_key) == 0) split_key[length(split_key)] <- ""
+  s3_info$key <- paste(split_key, collapse = "/")
+  if (s3_info$key != "") s3_info$key <- paste0(s3_info$key, "/")
+  
+  # s3 folder
+  name <- paste0(name, "/")
+  
+  s3_key <- sprintf("%s%s%s%s", s3_info$key, name, partition, FileName)
   
   tryCatch(s3 <- con@ptr$resource("s3"),
            error = function(e) py_error(e))
@@ -166,11 +200,12 @@ setMethod(
   "dbWriteTable", c("AthenaConnection", "character", "data.frame"),
   function(conn, name, value, overwrite=FALSE, append=FALSE,
            row.names = NA, field.types = NULL, 
-           partition = NULL, s3.location = NULL, file.type = c("csv", "tsv", "parquet"), ...){
+           partition = NULL, s3.location = NULL, file.type = c("csv", "tsv", "parquet"),
+           compress = FALSE, ...){
     if (!dbIsValid(conn)) {stop("Connection already closed.", call. = FALSE)}
     Athena_write_table(conn, name, value, overwrite, append,
                       row.names, field.types,
-                      partition, s3.location, file.type)
+                      partition, s3.location, file.type, compress)
     })
 
 #' @rdname AthenaWriteTables
@@ -179,11 +214,12 @@ setMethod(
   "dbWriteTable", c("AthenaConnection", "Id", "data.frame"),
   function(conn, name, value, overwrite=FALSE, append=FALSE,
            row.names = NA, field.types = NULL, 
-           partition = NULL, s3.location = NULL, file.type = c("csv", "tsv", "parquet"), ...){
+           partition = NULL, s3.location = NULL, file.type = c("csv", "tsv", "parquet"),
+           compress = FALSE, ...){
     if (!dbIsValid(conn)) {stop("Connection already closed.", call. = FALSE)}
     Athena_write_table(conn, name, value, overwrite, append,
                       row.names, field.types,
-                      partition, s3.location, file.type)
+                      partition, s3.location, file.type, compress)
   })
 
 #' @rdname AthenaWriteTables
@@ -192,13 +228,13 @@ setMethod(
   "dbWriteTable", c("AthenaConnection", "SQL", "data.frame"),
   function(conn, name, value, overwrite=FALSE, append=FALSE,
            row.names = NA, field.types = NULL, 
-           partition = NULL, s3.location = NULL, file.type = c("csv", "tsv", "parquet"), ...){
+           partition = NULL, s3.location = NULL, file.type = c("csv", "tsv", "parquet"),
+           compress = FALSE, ...){
     if (!dbIsValid(conn)) {stop("Connection already closed.", call. = FALSE)}
     Athena_write_table(conn, name, value, overwrite, append,
                       row.names, field.types,
-                      partition, s3.location, file.type)
+                      partition, s3.location, file.type, compress)
   })
-
 
 #' Converts data frame into suitable format to be uploaded to Athena
 #'
@@ -215,7 +251,10 @@ NULL
 setMethod("sqlData", "AthenaConnection", function(con, value, row.names = NA, ...) {
   stopifnot(is.data.frame(value))
   value <- sqlRownamesToColumn(value, row.names)
-  names(value) <- tolower(gsub("\\.", "_", make.names(names(value), unique = TRUE)))
+  field_names <- tolower(gsub("\\.", "_", make.names(names(value), unique = TRUE)))
+  DIFF <- setdiff(field_names, names(value))
+  names(value) <- field_names
+  if (length(DIFF) > 0) message("Info: data.frame colnames have been converted to align with Athena DDL naming convertions: \n",paste0(DIFF, collapse= ",\n"))
   for(i in seq_along(value)){
     if(is.list(value[[i]])){
       value[[i]] <- sapply(value[[i]], paste, collapse = "|")
@@ -231,8 +270,11 @@ setMethod("sqlData", "AthenaConnection", function(con, value, row.names = NA, ..
 #' @inheritParams DBI::sqlCreateTable
 #' @param field.types Additional field types used to override derived types.
 #' @param partition Partition Athena table (needs to be a named list or vector) for example: \code{c(var1 = "2019-20-13")}
-#' @param s3.location s3 bucket to store Athena table
+#' @param s3.location s3 bucket to store Athena table, must be set as a s3 uri for example ("s3://mybucket/data/"). 
+#'        By default s3.location is set s3 staging directory from \code{\linkS4class{AthenaConnection}} object.
 #' @param file.type What file type to store data.frame on s3, RAthena currently supports ["csv", "tsv", "parquet"]
+#' @param compress \code{FALSE | TRUE} To determine if to compress file.type. If file type is ["csv", "tsv"] then "gzip" compression is used.
+#'        Currently parquet compression isn't supported.
 #' @return \code{sqlCreateTable} returns data.frame's \code{DDL} in the \code{\link[DBI]{SQL}} format.
 #' @seealso \code{\link[DBI]{sqlCreateTable}}
 #' @examples 
@@ -268,17 +310,22 @@ NULL
 #' @rdname sqlCreateTable
 #' @export
 setMethod("sqlCreateTable", "AthenaConnection",
-  function(con, table = NULL, fields = NULL, field.types = NULL, partition = NULL, s3.location= NULL, file.type = c("csv", "tsv", "parquet"), ...){
+  function(con, table = NULL, fields = NULL, field.types = NULL, partition = NULL, s3.location= NULL, file.type = c("csv", "tsv", "parquet"), 
+           compress = FALSE, ...){
     if (!dbIsValid(con)) {stop("Connection already closed.", call. = FALSE)}
     stopifnot(is.character(table),
               is.data.frame(fields),
               is.null(field.types) || is.character(field.types),
               is.null(partition) || is.character(partition) || is.list(partition),
-              is.null(field.types) || is.character(field.types),
-              is.s3_uri(s3.location))
+              is.null(s3.location) || is.s3_uri(s3.location),
+              is.logical(compress))
     
     field <- createFields(con, fields, field.types = field.types)
     file.type <- match.arg(file.type)
+    
+    # use default s3_staging directory is s3.location isn't provided
+    if (is.null(s3.location)) s3.location <- con@info$s3_staging
+
     table1 <- gsub(".*\\.", "", table)
     
     s3.location <- gsub("/$", "", s3.location)
@@ -290,7 +337,7 @@ setMethod("sqlCreateTable", "AthenaConnection",
       partitioned(partition),
       FileType(file.type), "\n",
       "LOCATION ",s3.location, "\n",
-      header(file.type)
+      header(file.type, compress)
     ))
   }
 )
@@ -305,7 +352,8 @@ createFields <- function(con, fields, field.types) {
   }
   
   field_names <- tolower(gsub("\\.", "_", make.names(names(fields), unique = TRUE)))
-  message("Info: data.frame colnames have been converted to align with Athena DDL naming convertions: \n",paste0(field_names, collapse= ",\n"))
+  DIFF <- setdiff(field_names, names(fields))
+  if (length(DIFF) > 0) message("Info: data.frame colnames have been converted to align with Athena DDL naming convertions: \n",paste0(DIFF, collapse= ",\n"))
   field.types <- unname(fields)
   paste0(field_names, " ", field.types)
 }
@@ -324,10 +372,23 @@ FileType <- function(obj){
          parquet = SQL("STORED AS PARQUET"))
 }
 
-header <- function(obj){
+header <- function(obj, compress){
+  compress <- if(!compress) "" else{switch(obj,
+                                           csv = ",\n\t\t'compressionType'='gzip'",
+                                           tsv = ",\n\t\t'compressionType'='gzip'",
+                                           parquet = stop("Compression is currently not supported for parquet file type", call. = F) #'tblproperties ("parquet.compress"="SNAPPY")'
+                                           )}
   switch(obj,
-         csv = "TBLPROPERTIES (\"skip.header.line.count\"=\"1\");",
-         tsv = "TBLPROPERTIES (\"skip.header.line.count\"=\"1\");",
-         parquet = ";")
+         csv = paste0('TBLPROPERTIES ("skip.header.line.count"="1"',compress,');'),
+         tsv = paste0('TBLPROPERTIES ("skip.header.line.count"="1"',compress,');'),
+         parquet = paste0(compress,";"))
 }
 
+Compress <- function(file.type, compress){
+  if(compress){
+  switch(file.type,
+         "csv" = paste(file.type, "gz", sep = "."),
+         "tsv" = paste(file.type, "gz", sep = "."),
+         "parquet" = stop("Compression is currently not supported for parquet file type"))
+  } else {file.type}
+}
