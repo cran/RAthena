@@ -1,7 +1,7 @@
-5604c0e59ada7c4111ace8bdf8a092ed *DESCRIPTION
+46aff1d0427c27ecdc35adb843db2795 *DESCRIPTION
 c4afaa2ab9feac5091df86cf1758cb78 *LICENSE
 1107a7326fd5cfcaa09641c23bed2e84 *NAMESPACE
-3b00c82cc4f1ab82a1f4cbe3d1accd61 *NEWS.md
+52ea44258add067e94897e5719cfbd86 *NEWS.md
 25d8bbf26cca17ea269a553156ffa023 *R/Connection.R
 401b976a732f1f104cde0bc3b9c23655 *R/DataTypes.R
 929ac550a0db3429b3ff972d417c8313 *R/Driver.R
@@ -10,13 +10,13 @@ f5d82f87b42881b2984c95a42243e893 *R/Result.R
 1214d5e2181d080ae11cc7b69a78d6a7 *R/athena_low_api.R
 3fc7ed7f36e24c7cfc7b30a6748ad183 *R/dplyr_integration.R
 5fc2e076e85ddf5e5c19ffcbbc5f24bb *R/install.R
-15e3bde8870418b8f8c64782a0062c2b *R/table.R
+238137b63fa8b32de0242d6b0f022800 *R/table.R
 5b83cc5f2552ba7f4a16c9488ffd6144 *R/util.R
 2e593707bae0b542679dceec354640d9 *R/zzz.R
 a412a056ad2962e7d3916df585638efc *README.md
 23cde31d695a8b7160f7656fddc388b7 *man/AthenaConnection.Rd
 aa9f2846ae3410a80f1b2cb5c2a17432 *man/AthenaDriver.Rd
-7f3bdd7e5d4561e415f581043a50b664 *man/AthenaWriteTables.Rd
+52b4e6c5589c659642c13ef3cafa221a *man/AthenaWriteTables.Rd
 e16b665432fb6f4ceb198293cd6797fe *man/Query.Rd
 2bb1089663d583e958ff1b29e35551f2 *man/RAthena-package.Rd
 38f303161f46fe4e40e7500945f550c0 *man/assume_role.Rd
@@ -44,7 +44,7 @@ e8d7b8f929755fc02899910be9e0b3e9 *man/dbQuote.Rd
 045d49edf89c0ab9b7517008ac9ee27b *man/db_save_query.Rd
 4f21a264c7939c4e00c19c8b4bcbace0 *man/install_boto.Rd
 f288eeb1dbbac0f471bf2e97cbb982d8 *man/session_token.Rd
-ab258f55c9028e6b73eee3074844f454 *man/sqlCreateTable.Rd
+01ad877eb9cf0e1327792aa8460826f1 *man/sqlCreateTable.Rd
 3a8ce648297d3efed8c1e9ab4a6cde96 *man/sqlData.Rd
 d68ca7f97ff57b127d18116b94767773 *man/work_group.Rd
 d5fbdcf28bc53a327ec35f38ee906b4f *tests/testthat.R

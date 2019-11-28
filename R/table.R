@@ -16,8 +16,8 @@
 #'        By default s3.location is set s3 staging directory from \code{\linkS4class{AthenaConnection}} object.
 #' @param file.type What file type to store data.frame on s3, RAthena currently supports ["csv", "tsv", "parquet"].
 #'                  \strong{Note:} "parquet" format is supported by the \code{arrow} package and it will need to be installed to utilise the "parquet" format.
-#' @param compress \code{FALSE | TRUE} To determine if to compress file.type. If file type is ["csv", "tsv"] then "gzip" compression is used.
-#'        Currently parquet compression isn't supported.
+#' @param compress \code{FALSE | TRUE} To determine if to compress file.type. If file type is ["csv", "tsv"] then "gzip" compression is used, for file type "parquet" 
+#'                 "snappy" compression is used.
 #' @inheritParams DBI::sqlCreateTable
 #' @return \code{dbWriteTable()} returns \code{TRUE}, invisibly. If the table exists, and both append and overwrite
 #'         arguments are unset, or append = TRUE and the data frame with the new data has different column names,
@@ -118,7 +118,9 @@ Athena_write_table <-
     if(file.type == "parquet"){
       if(!requireNamespace("arrow", quietly=TRUE))
         stop("The package arrow is required for R to utilise Apache Arrow to create parquet files.", call. = FALSE)
-      else {arrow::write_parquet(value, FileLocation)}
+      else {
+        cp <- if(compress) "snappy" else NULL
+        arrow::write_parquet(value, FileLocation, compression = cp)}
     }
     
     # writes out csv/tsv, uses data.table for extra speed
@@ -144,7 +146,7 @@ Athena_write_table <-
     upload_data(conn, FileLocation, name, partition, s3.location, file.type, compress)
     
     if (!append) {
-      sql <- sqlCreateTable(conn, Name, value, field.types = field.types, 
+      sql <- sqlCreateTable(conn, table = Name, fields = value, field.types = field.types, 
                             partition = names(partition),
                             s3.location = s3.location, file.type = file.type,
                             compress = compress)
@@ -310,7 +312,7 @@ NULL
 #' @rdname sqlCreateTable
 #' @export
 setMethod("sqlCreateTable", "AthenaConnection",
-  function(con, table = NULL, fields = NULL, field.types = NULL, partition = NULL, s3.location= NULL, file.type = c("csv", "tsv", "parquet"), 
+  function(con, table, fields, field.types = NULL, partition = NULL, s3.location= NULL, file.type = c("csv", "tsv", "parquet"), 
            compress = FALSE, ...){
     if (!dbIsValid(con)) {stop("Connection already closed.", call. = FALSE)}
     stopifnot(is.character(table),
@@ -320,7 +322,7 @@ setMethod("sqlCreateTable", "AthenaConnection",
               is.null(s3.location) || is.s3_uri(s3.location),
               is.logical(compress))
     
-    field <- createFields(con, fields, field.types = field.types)
+    field <- createFields(con, fields = fields, field.types = field.types)
     file.type <- match.arg(file.type)
     
     # use default s3_staging directory is s3.location isn't provided
@@ -376,7 +378,7 @@ header <- function(obj, compress){
   compress <- if(!compress) "" else{switch(obj,
                                            csv = ",\n\t\t'compressionType'='gzip'",
                                            tsv = ",\n\t\t'compressionType'='gzip'",
-                                           parquet = stop("Compression is currently not supported for parquet file type", call. = F) #'tblproperties ("parquet.compress"="SNAPPY")'
+                                           parquet = 'tblproperties ("parquet.compress"="SNAPPY")'
                                            )}
   switch(obj,
          csv = paste0('TBLPROPERTIES ("skip.header.line.count"="1"',compress,');'),
@@ -389,6 +391,6 @@ Compress <- function(file.type, compress){
   switch(file.type,
          "csv" = paste(file.type, "gz", sep = "."),
          "tsv" = paste(file.type, "gz", sep = "."),
-         "parquet" = stop("Compression is currently not supported for parquet file type"))
+         "parquet" = paste("snappy", file.type, sep = "."))
   } else {file.type}
 }
