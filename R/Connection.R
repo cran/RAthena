@@ -36,8 +36,7 @@ AthenaConnection <-
                           profile_name = profile_name,
                           ...),
       error = function(e) py_error(e))
-    quote <- "'"
-  
+    
     if(is.null(s3_staging_dir) && !is.null(work_group)){
       Athena <- ptr$client("athena")
       tryCatch(s3_staging_dir <- Athena$get_work_group(WorkGroup = work_group)$WorkGroup$Configuration$ResultConfiguration$OutputLocation,
@@ -56,10 +55,11 @@ AthenaConnection <-
                  poll_interval = poll_interval, encryption_option = encryption_option,
                  kms_key = kms_key, expiration = aws_expiration)
 
-    res <- new("AthenaConnection",  ptr = ptr, info = info, quote = quote)
+    res <- new("AthenaConnection",  ptr = ptr, info = info, quote = "`")
   }
 
 #' @rdname AthenaConnection
+#' @keywords internal
 #' @export
 setClass(
   "AthenaConnection",
@@ -308,7 +308,6 @@ setMethod(
 setMethod(
   "dbQuoteIdentifier", c("AthenaConnection", "SQL"),
   getMethod("dbQuoteIdentifier", c("DBIConnection", "SQL"), asNamespace("DBI")))
-
 
 #' List Athena Tables
 #'
