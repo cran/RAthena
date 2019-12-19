@@ -18,7 +18,7 @@ test_that("Testing data transfer between R and athena", {
   
   df <- data.frame(w = as.POSIXct((Sys.time() -9):Sys.time(), origin = "1970-01-01"),
                    x = 1:10,
-                   y = letters[1:10], 
+                   y = c(letters[1:8], c(" \\t\\t\\n 123 \" \\t\\t\\n ", ",15 \"")), 
                    z = sample(c(TRUE, FALSE), 10, replace = T),
                    stringsAsFactors = F)
   
@@ -26,10 +26,7 @@ test_that("Testing data transfer between R and athena", {
   df2 <- data.frame(var1 = sample(letters, 10, replace = T),
                    var2 = bit64::as.integer64(1:10),
                    stringsAsFactors = F)
-  
-  mtcars2 <- mtcars
-  row.names(mtcars2) <- NULL
-  
+
   DATE <- Sys.Date()
   dbWriteTable(con, "test_df", df, overwrite = T, partition = c("timesTamp" = format(DATE, "%Y%m%d")), s3.location = s3.location1)
   dbWriteTable(con, "test_df2", df, 
@@ -39,7 +36,7 @@ test_that("Testing data transfer between R and athena", {
                              "DAY" = format(DATE, "%d")),
                s3.location = s3.location2)
   dbWriteTable(con, "df_bigint", df2, overwrite = T, s3.location = s3.location2)
-  dbWriteTable(con, "mtcars2", mtcars2, overwrite = T, compress = T)
+  dbWriteTable(con, "mtcars2", mtcars, overwrite = T, compress = T) # mtcars used to test data.frame with row.names
   
   # if data.table is available in namespace result returned as data.table
   test_df <- as.data.frame(dbGetQuery(con, paste0("select w, x, y, z from test_df where timestamp ='", format(DATE, "%Y%m%d"),"'")))
@@ -47,10 +44,10 @@ test_that("Testing data transfer between R and athena", {
   test_df3 <- as.data.frame(dbGetQuery(con, "select * from df_bigint"))
   test_df4 <- as.data.frame(dbGetQuery(con, "select * from mtcars2"))
   
-  expect_equal(test_df,df)
-  expect_equal(test_df2,df)
+  expect_equal(test_df,sqlData(con, df))
+  expect_equal(test_df2,sqlData(con, df))
   expect_equal(test_df3,df2)
-  expect_equal(test_df4, mtcars2)
+  expect_equal(test_df4, sqlData(con, mtcars))
 })
 
 

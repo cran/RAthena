@@ -1,3 +1,47 @@
+# RAthena 1.6.0
+Updated package version for cran release
+
+# RAthena 1.5.0.9004
+### Major Change
+* Default delimited file uploaded to AWS Athena changed from "csv" to "tsv" this is due to separating value "," in character variables. By using "tsv" file type JSON/Array objects can be passed to Athena through character types. To prevent this becoming a breaking change `dbWriteTable` `append` parameter checks and uses existing AWS Athena DDL file type. If `file.type` doesn't match Athena DDL file type then user will receive a warning message:
+
+```
+warning('Appended `file.type` is not compatible with the existing Athena DDL file type and has been converted to "', File.Type,'".', call. = FALSE)
+```
+
+### Bug fix
+* Due to issue highlighted by @OssiLehtinen in #50, special characters have issue being processed when using flat file in the backend.
+
+### Unit Tests
+* Special characters have been added to unit test `data-transfer`
+
+# RAthena 1.5.0.9003
+### New Feature
+* Due to help from @OssiLehtinen, `dbRemoveTable` can now remove S3 files for AWS Athena table being removed.
+
+### Unit Tests
+* `dbRemoveTable` new parameters are added in unit test
+
+# RAthena 1.5.0.9002
+### Minor Change
+* Added AWS_ATHENA_WORK_GROUP environmental variable support
+
+# RAthena 1.5.0.9001
+### Bug fixed
+* Fixed issue where `as.character` was getting wrongly translated #45
+
+# RAthena 1.5.0.9000
+### Minor Change
+* Removed tolower conversion due to request #41
+
+### Bug fixed
+* Fixed issue where row.names not being correctly catered and returning NA in column names #41
+* Fixed issue with `INTEGER` being incorrectly translated in `sql_translate_env.R`
+
+### Unit Tests
+* Added row.names to unit test data transfer
+* Updated dplyr sql_translate_env until test to cater bug fix
+
 # RAthena 1.5.0
 Updated package version for cran release
 
@@ -44,7 +88,7 @@ con <- dbConnect(RAthena::athena())
 dbWriteTable(con, "test_split1", df, compress = T, overwrite = T) # default will now split compressed file into 20 equal size files.
 ```
 
-Added information message to inform user about what files have been added to S3 location if user is overwritting an Athena table.
+Added information message to inform user about what files have been added to S3 location if user is overwriting an Athena table.
 
 ### Minor Change
 * `copy_to` method now supports compress and max_batch, to align with `dbWriteTable`
@@ -75,7 +119,7 @@ Thanks to @OssiLehtinen for identifying issue around `sql_translate_env`. Previo
 
 # RAthena 1.4.1
 ### New Features:
-* Parquet file type can now be compress using snappy compression when writting data to S3.
+* Parquet file type can now be compress using snappy compression when writing data to S3.
 
 ### Bug fixed
 * Older versions of R are returning errors when function `dbWriteTable` is called. The bug is due to function `sqlCreateTable` which `dbWriteTable` calls. Parameters `table` and `fields` were set to `NULL`. This has now been fixed.
@@ -100,7 +144,7 @@ dbWrite(con, "iris", iris)
 * Info message wasn't being return when colnames needed changing for Athena DDL
 
 ### Unit Tests
-* `data transfer` test now tests compress, and default s3.location when transfering data
+* `data transfer` test now tests compress, and default s3.location when transferring data
 
 # RAthena 1.3.0.9000
 ### New Feature
