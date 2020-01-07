@@ -1,3 +1,28 @@
+# RAthena 1.7.0
+Updated package version for cran release
+
+# RAthena 1.6.0.9001
+### New Feature
+* Added integration into Rstudio connections tab
+* Added information message of amount of data scanned by aws athena
+* Added method to change backend file parser so user can change file parser from `data.table` to `vroom`. From now on it is possible to change file parser using `RAthena_options` for example:
+
+```
+library(RAthena)
+
+RAthena_options("vroom")
+
+```
+
+* new function `dbGetTables` that returns Athena hierarchy as a data.frame
+
+### Unit tests
+* Added datatransfer unit test for backend file parser vroom
+
+# RAthena 1.6.0.9000
+### Documentation
+Updated rdocumentation to roxygen2 7.0.2
+
 # RAthena 1.6.0
 Updated package version for cran release
 

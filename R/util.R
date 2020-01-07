@@ -47,7 +47,7 @@ rand_poll <- function() {runif(n = 1, min = 50, max = 100) / 100}
 py_error <- function(e){
   py_err <- py_last_error()
   stop(py_err$value, call. = F)
-  }
+}
 
 # python warning handler
 py_warning <- function(e){
@@ -130,7 +130,7 @@ work_group_config_update <-
            PublishCloudWatchMetricsEnabled = FALSE,
            BytesScannedCutoffPerQuery = 10000000L,
            RequesterPaysEnabled = FALSE){
-
+    
     ConfigurationUpdates <- list()
     ResultConfigurationUpdates <- list(OutputLocation = conn@info$s3_staging,
                                        RemoveOutputLocation = RemoveOutputLocation)
@@ -171,7 +171,7 @@ time_check <- function(x){
   m <- x %/% 60
   s <- round(x %% 60, 0)
   if(m < 15) warning("Athena Connection will expire in ",time_format(m), ":",time_format(s)," (mm:ss)",
-                            call. = F)}
+                     call. = F)}
 
 time_format <- function(x) if(x < 10) paste0(0,x) else x
 
@@ -184,40 +184,14 @@ pkg_method <- function(fun, pkg) {
   return(fun_name)
 }
 
-
-# split data frame into batches
-split_data <- function(x, max.batch = Inf, path = tempdir(), sep = ",", compress = T, file.type = "csv"){
-  
-  # Bypass splitter if not compressed
-  if(!compress){
-    file <- paste(paste(sample(letters, 10, replace = TRUE), collapse = ""), Compress(file.type, compress), sep = ".")
-    path <- file.path(path, file)
-    fwrite(x, path, sep = sep, quote = FALSE, showProgress = FALSE)
-    return(path)}
-  
-  # set up split vec
-  max_row <- nrow(x)
-  split_10 <- .05 * max_row # default currently set to 20 split: https://github.com/DyfanJones/RAthena/issues/36
-  min.batch = 1000000 # min.batch sized at 1M
-  
-  # if batch is set to default
-  if(is.infinite(max.batch)){
-    max.batch <- max(split_10, min.batch)
-    split_vec <- seq(1, max_row, max.batch)
+# Format DataScannedInBytes to a more readable format: 
+data_scanned <- 
+  function (x) {
+    standard <- "legacy"
+    base <- 1024
+    units_map <- c("B", "KB", "MB", "GB", "TB", "PB")
+    power <- if (x <= 0) 0L else min(as.integer(log(x, base = base)), length(units_map) - 1L)
+    unit <- units_map[power + 1L]
+    if (power == 0 && standard == "legacy") unit <- "Bytes"
+    paste(round(x/base^power, digits = 2), unit)
   }
-  
-  # if max.batch is set by user
-  if(!is.infinite(max.batch)) split_vec <- seq(1, max_row, as.integer(max.batch))
-     
-  sapply(split_vec, write_batch, dt = x, max.batch = max.batch,
-         max_row= max_row, path = path, sep = sep, 
-         compress=compress, file.type= file.type)
-}
-
-write_batch <- function(split_vec, dt, max.batch, max_row, path, sep, compress, file.type){
-  sample <- dt[split_vec:min(max_row,(split_vec+max.batch-1)),]
-  file <- paste(paste(sample(letters, 10, replace = TRUE), collapse = ""), Compress(file.type, compress), sep = ".")
-  path <- file.path(path, file)
-  fwrite(sample, path, sep = sep, quote = FALSE, showProgress = FALSE)
-  path
-}

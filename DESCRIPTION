@@ -1,7 +1,7 @@
 Package: RAthena
 Type: Package
 Title: Connect to 'AWS Athena' using 'Boto3' ('DBI' Interface)
-Version: 1.6.0
+Version: 1.7.0
 Authors@R: person("Dyfan", "Jones", email="dyfan.r.jones@gmail.com", 
                   role= c("aut", "cre"))
 Description: Designed to be compatible with the R package 'DBI' (Database Interface)
@@ -10,20 +10,21 @@ Description: Designed to be compatible with the R package 'DBI' (Database Interf
     <https://boto3.amazonaws.com/v1/documentation/api/latest/index.html> is used as a driver.
 Imports: data.table, DBI (>= 0.7), methods, reticulate (>= 1.13),
         stats, utils
-Suggests: arrow, bit64, dplyr (>= 0.7.0), dbplyr, testthat
+Suggests: arrow, bit64, dplyr (>= 0.7.0), dbplyr, testthat, vroom
 Depends: R (>= 3.2.0)
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
-RoxygenNote: 6.1.1
+RoxygenNote: 7.0.2
 URL: https://github.com/DyfanJones/RAthena
 BugReports: https://github.com/DyfanJones/RAthena/issues
-Collate: 'RAthena.R' 'Driver.R' 'Connection.R' 'DataTypes.R' 'Result.R'
+Collate: 'RAthena.R' 'Driver.R' 'Connection.R' 'DataTypes.R'
+        'File_Parser.R' 'Options.R' 'Result.R' 'View.R'
         'athena_low_api.R' 'dplyr_integration.R' 'install.R'
         'sql_translate_env.R' 'table.R' 'util.R' 'zzz.R'
 NeedsCompilation: no
-Packaged: 2019-12-19 09:50:36 UTC; lmar763
+Packaged: 2020-01-07 11:52:56 UTC; lmar763
 Author: Dyfan Jones [aut, cre]
 Maintainer: Dyfan Jones <dyfan.r.jones@gmail.com>
 Repository: CRAN
-Date/Publication: 2019-12-19 10:50:02 UTC
+Date/Publication: 2020-01-07 22:10:02 UTC
