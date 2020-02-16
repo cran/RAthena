@@ -357,7 +357,7 @@ setMethod(
   }
 )
 
-#' List Athena Schema, Tables and TableTypes
+#' List Athena Schema, Tables and Table Types
 #'
 #' Method to get Athena schema, tables and table types return as a data.frame
 #' @name dbGetTables
@@ -455,9 +455,12 @@ setMethod("dbListFields", c("AthenaConnection", "character") ,
             glue <- conn@ptr$client("glue")
             tryCatch(
               output <- glue$get_table(DatabaseName = dbms.name,
-                                       Name = Table)$Table$StorageDescriptor$Columns,
+                                       Name = Table)$Table,
               error = function(e) py_error(e))
-            sapply(output, function(y) y$Name)
+            col_names = vapply(output$StorageDescriptor$Columns, function(y) y$Name, FUN.VALUE = character(1))
+            partitions = vapply(output$PartitionKeys,function(y) y$Name, FUN.VALUE = character(1))
+            
+            c(col_names, partitions)
           })
 
 #' Does Athena table exist?
@@ -603,6 +606,7 @@ setMethod(
 #'
 #' @name dbGetQuery
 #' @inheritParams DBI::dbGetQuery
+#' @param statistics If set to \code{TRUE} will print out AWS Athena statistics of query.
 #' @return \code{dbGetQuery()} returns a dataframe.
 #' @seealso \code{\link[DBI]{dbGetQuery}}
 #' @examples
@@ -630,10 +634,13 @@ NULL
 setMethod(
   "dbGetQuery", c("AthenaConnection", "character"),
   function(conn,
-           statement = NULL, ...){
+           statement = NULL, 
+           statistics = FALSE, ...){
     if (!dbIsValid(conn)) {stop("Connection already closed.", call. = FALSE)}
+    stopifnot(is.logical(statistics))
     rs <- dbSendQuery(conn, statement = statement)
     on.exit(dbClearResult(rs))
+    if(statistics) print(dbStatistics(rs))
     dbFetch(res = rs, n = -1, ...)
   })
 

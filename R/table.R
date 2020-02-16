@@ -107,34 +107,32 @@ Athena_write_table <-
     if(!is.null(partition) && is.null(names(partition))) stop("partition parameter requires to be a named vector or list", call. = FALSE)
     if(!is.null(partition)) {names(partition) <- tolower(names(partition))}
     
-    if(!grepl("\\.", name)) Name <- paste(conn@info$dbms.name, name, sep = ".") 
-    else{Name <- name
-         name <- gsub(".*\\.", "", name)}
-    
+    if(!grepl("\\.", name)) name <- paste(conn@info$dbms.name, name, sep = ".") 
+
     if (overwrite && append) stop("overwrite and append cannot both be TRUE", call. = FALSE)
 
     if(append && is.null(partition)) stop("Athena requires the table to be partitioned to append", call. = FALSE)
     
     # Check if table already exists in the database
-    found <- dbExistsTable(conn, Name)
+    found <- dbExistsTable(conn, name)
     
     if (found && !overwrite && !append) {
-      stop("Table ", Name, " exists in database, and both overwrite and",
+      stop("Table ", name, " exists in database, and both overwrite and",
            " append are FALSE", call. = FALSE)
     }
     
     if(!found && append){
-      stop("Table ", Name, " does not exist in database and append is set to TRUE", call. = T)
+      stop("Table ", name, " does not exist in database and append is set to TRUE", call. = T)
     }
     
     if (found && overwrite) {
-      dbRemoveTable(conn, Name, confirm = TRUE)
+      dbRemoveTable(conn, name, confirm = TRUE)
     }
     
     # Check file format if appending
     if(found && append){
-      dbms.name <- gsub("\\..*", "" , Name)
-      Table <- gsub(".*\\.", "" , Name)
+      dbms.name <- gsub("\\..*", "" , name)
+      Table <- gsub(".*\\.", "" , name)
       
       glue <- conn@ptr$client("glue")
       tryCatch(
@@ -149,7 +147,7 @@ Athena_write_table <-
                                                                                        "\t" = "tsv",
                                                                                        stop("RAthena currently only supports csv and tsv delimited format")),
                          "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe" = "parquet",
-                         stop("Unable to append onto table: ", Name,"\n", tbl_info$StorageDescriptor$SerdeInfo$SerializationLibrary,
+                         stop("Unable to append onto table: ", name,"\n", tbl_info$StorageDescriptor$SerdeInfo$SerializationLibrary,
                               ": Is currently not supported by RAthena", call. = F))
 
       # Return if existing files are compressed or not
@@ -165,6 +163,9 @@ Athena_write_table <-
                                     if(tolower(tbl_info$Parameters$compressionType) == "gzip") TRUE else
                                       stop("RAthena currently only supports gzip compression for csv", call. = F)}})
       if(file.type != File.Type) warning('Appended `file.type` is not compatible with the existing Athena DDL file type and has been converted to "', File.Type,'".', call. = FALSE)
+      
+      # get previous s3 location #73
+      s3.location <- tolower(tbl_info$StorageDescriptor$Location)
       file.type <- File.Type
     }
     
@@ -197,10 +198,10 @@ Athena_write_table <-
     }
 
     # send data over to s3 bucket
-    upload_data(conn, FileLocation, name, partition, s3.location, file.type, compress)
+    upload_data(conn, FileLocation, name, partition, s3.location, file.type, compress, append)
     
     if (!append) {
-      sql <- sqlCreateTable(conn, table = Name, fields = value, field.types = field.types, 
+      sql <- sqlCreateTable(conn, table = name, fields = value, field.types = field.types, 
                             partition = names(partition),
                             s3.location = s3.location, file.type = file.type,
                             compress = compress)
@@ -210,7 +211,7 @@ Athena_write_table <-
       dbClearResult(rs)}
     
     # Repair table
-    res <- dbExecute(conn, paste0("MSCK REPAIR TABLE ", Name))
+    res <- dbExecute(conn, paste0("MSCK REPAIR TABLE ", name))
     dbClearResult(res)
     
     on.exit({lapply(FileLocation, unlink)
@@ -220,34 +221,23 @@ Athena_write_table <-
   }
 
 # send data to s3 is Athena registered location
-upload_data <- function(con, x, name, partition = NULL, s3.location= NULL,  file.type = NULL, compress = NULL) {
-  # formatting s3 partitions
-  partition <- unlist(partition)
-  partition <- paste(names(partition), unname(partition), sep = "=", collapse = "/")
-  if (partition != "") partition <- paste0(partition, "/")
+upload_data <- function(con, x, name, partition = NULL, s3.location= NULL,  file.type = NULL, compress = NULL, append = FALSE) {
   
-  # s3_file name
-  FileType <- if(compress) Compress(file.type, compress) else file.type
-  FileName <- paste(if (length(x) > 1) paste0(name,"_", 1:length(x)) else name, FileType, sep = ".")
+  # Get schema and name
+  if (grepl("\\.", name)) {
+    schema <- gsub("\\..*", "" , name)
+    name <- gsub(".*\\.", "" , name)
+  } else {
+    schema <- con@info$dbms.name
+    name <- name}
   
-  # s3 bucket and key split
-  s3_info <- split_s3_uri(s3.location)
-  s3_info$key <- gsub("/$", "", s3_info$key)
-  split_key <- unlist(strsplit(s3_info$key,"/"))
-  
-  if(split_key[length(split_key)] == name || length(split_key) == 0) split_key[length(split_key)] <- ""
-  s3_info$key <- paste(split_key, collapse = "/")
-  if (s3_info$key != "") s3_info$key <- paste0(s3_info$key, "/")
-  
-  # s3 folder
-  name <- paste0(name, "/")
-  
-  s3_key <- sprintf("%s%s%s%s", s3_info$key, name, partition, FileName)
+  # create s3 location components
+  s3_key <- s3_upload_location(x, schema, name, partition, s3.location, file.type, compress, append)
   
   tryCatch(s3 <- con@ptr$resource("s3"),
            error = function(e) py_error(e))
   for (i in 1:length(x)){
-    tryCatch(s3$Bucket(s3_info$bucket)$upload_file(Filename = x[i], Key = s3_key[i]),
+    tryCatch(s3$Bucket(s3_key[[1]])$upload_file(Filename = x[i], Key = s3_key[[2]][i]),
              error = function(e) py_error(e))}
   invisible(NULL)
 }
@@ -409,13 +399,19 @@ setMethod("sqlCreateTable", "AthenaConnection",
     
     # use default s3_staging directory is s3.location isn't provided
     if (is.null(s3.location)) s3.location <- con@info$s3_staging
-
-    table1 <- gsub(".*\\.", "", table)
-    table <- paste0(quote_identifier(con,  unlist(strsplit(table,"\\."))), collapse = ".")
+    
+    if (grepl("\\.", table)) {
+      schema <- gsub("\\..*", "" , table)
+      table1 <- gsub(".*\\.", "" , table)
+    } else {
+      schema <- con@info$dbms.name
+      table1 <- table}
+    
+    table <- paste0(quote_identifier(con,  c(schema,table1)), collapse = ".")
     
     s3.location <- gsub("/$", "", s3.location)
     if(grepl(table1, s3.location)){s3.location <- gsub(paste0("/", table1,"$"), "", s3.location)}
-    s3.location <- paste0("'",s3.location,"/", table1,"/'")
+    s3.location <- paste0("'",s3.location,"/",schema,"/", table1,"/'")
     SQL(paste0(
       "CREATE EXTERNAL TABLE ", table, " (\n",
       "  ", paste(field, collapse = ",\n  "), "\n)\n",
@@ -493,4 +489,50 @@ quote_identifier <- function(conn, x, ...) {
     x <- gsub(conn@quote, paste0(conn@quote, conn@quote), x, fixed = TRUE)
   }
   DBI::SQL(paste(conn@quote, encodeString(x), conn@quote, sep = ""))
+}
+
+# moved s3 component builder to separate helper function to allow for unit tests
+s3_upload_location <- function(x, 
+                               schema, 
+                               name,
+                               partition = NULL,
+                               s3.location= NULL,
+                               file.type = NULL,
+                               compress = NULL,
+                               append = FALSE){
+  # formatting s3 partitions
+  partition <- unlist(partition)
+  partition <- paste(names(partition), unname(partition), sep = "=", collapse = "/")
+  
+  # s3_file name
+  FileType <- if(compress) Compress(file.type, compress) else file.type
+  FileName <- paste(if (length(x) > 1) paste0(name,"_", 1:length(x)) else name, FileType, sep = ".")
+  
+  # s3 bucket and key split
+  s3_info <- split_s3_uri(s3.location)
+  s3_info$key <- gsub("/$", "", s3_info$key)
+  
+  # Append data to existing s3 location
+  if(append) {return(list(s3_info$bucket,
+                          paste(s3_info$key, partition, FileName, sep = "/")))}
+  
+  if (partition != "") partition <- paste0(partition, "/")
+  split_key <- unlist(strsplit(s3_info$key,"/"))
+  
+  # remove name from s3 key
+  if(split_key[length(split_key)] == name || length(split_key) == 0)  split_key <- split_key[-length(split_key)]
+  
+  # remove schema from s3 key
+  if(any(schema == split_key))  split_key <- split_key[-which(schema == split_key)]
+  
+  s3_info$key <- paste(split_key, collapse = "/")
+  if (s3_info$key != "") s3_info$key <- paste0(s3_info$key, "/")
+  
+  # s3 folder
+  schema <- paste0(schema, "/")
+  name <- paste0(name, "/")
+  
+  # S3 new syntax #73
+  list(s3_info$bucket,
+       sprintf("%s%s%s%s%s", s3_info$key, schema, name, partition, FileName))
 }

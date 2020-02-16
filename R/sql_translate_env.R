@@ -8,6 +8,10 @@ NULL
 #' \href{https://docs.aws.amazon.com/athena/latest/ug/functions-operators-reference-section.html}{DML Queries, Functions, and Operators}
 #' @param con An \code{\linkS4class{AthenaConnection}} object, produced by
 #'   [DBI::dbConnect()]
+#' @param x An object to escape. Existing sql vectors will be left as is,
+#'   character vectors are escaped with single quotes, numeric vectors have
+#'   trailing `.0` added if they're whole numbers, identifiers are
+#'   escaped with double quotes.
 #' @name sql_translate_env
 NULL
 
@@ -61,6 +65,8 @@ sql_translate_env.AthenaConnection <- function(con) {
       is.finite = sql_prefix("IS_FINITE"),
       is.infinite = sql_prefix("IS_FINITE"),
       is.nan = sql_prefix("IS_NAN"),
+      paste0 = sql_prefix("CONCAT"),
+      paste = function(..., sep = " ") athena_paste(list(...), sep = sep, con = con),
       `[[` = function(x, i) {
         if (is.numeric(i) && all.equal(i, as.integer(i))) {
           i <- as.integer(i)
@@ -77,4 +83,26 @@ sql_translate_env.AthenaConnection <- function(con) {
     ),
     athena_window_functions()
   )
+}
+
+# helper function to support R function paste in sql_translation_env
+athena_paste <- function(..., sep = " ", con) {
+  escape <- pkg_method("escape", "dbplyr")
+  sql <- pkg_method("sql", "dplyr")
+  sep <- paste0('||', escape(sep, con = con), '||')
+  pieces <- vapply(list(...), escape, con = con,collapse = sep, character(1))
+  sql(paste(pieces))
+}
+
+# Athena specifc S3 method for converting date variables and iso formateed date strings to date literals
+#' @rdname sql_translate_env
+#' @export
+sql_escape_string.AthenaConnection <- function(con, x) {
+  # Added string restiction to prevent timestamps wrongly added to date format #75
+  all_dates <- all(try(as.Date(x, tryFormats = "%Y-%m-%d"), silent=T) == x) & all(nchar(x) == 10)
+  if(all_dates & !is.na(all_dates)) {
+    paste0('DATE ', DBI::dbQuoteString(con, x))
+  } else {
+    DBI::dbQuoteString(con, x)
+  }
 }
