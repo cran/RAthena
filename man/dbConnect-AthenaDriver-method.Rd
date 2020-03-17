@@ -85,7 +85,10 @@ of supported environment variables:
 \item{\strong{AWS_EXPIRATION:} is equivalent to the \code{dbConnect} parameter - \code{duration_seconds}}
 \item{\strong{AWS_ATHENA_S3_STAGING_DIR:} is equivalent to the \code{dbConnect} parameter - \code{s3_staging_dir}}
 \item{\strong{AWS_ATHENA_WORK_GROUP:} is equivalent to \code{dbConnect} parameter - \code{work_group}}
+\item{\strong{AWS_REGION:} is equivalent to \code{dbConnect} parameter - \code{region_name}}
 }
+
+\strong{NOTE:} If you have set any environmental variables in \code{.Renviron} please restart your R in order for the changes to take affect.
 }
 \examples{
 \dontrun{

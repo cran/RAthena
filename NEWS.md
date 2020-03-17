@@ -1,7 +1,63 @@
+# RAthena 1.8.0
+## New Feature
+* Inspired by `pyathena`, `RAthena_options` now has a new parameter `cache_size`. This implements local caching in R environments instead of using AWS `list_query_executions`. This is down to `dbClearResult` clearing S3's Athena output when caching isn't disabled
+* `RAthena_options` now has `clear_cache` parameter to clear down all cached data.
+* `dbRemoveTable` now utilise `AWS Glue` to remove tables from `AWS Glue` catalogue. This has a performance enhancement:
+
+```
+library(DBI)
+
+con = dbConnect(RAthena::athena())
+
+# upload iris dataframe for removal test
+dbWriteTable(con, "iris2", iris)
+
+# Athena method
+system.time(dbRemoveTable(con, "iris2", confirm = T))
+# user  system elapsed 
+# 0.131   0.037   2.404 
+
+# upload iris dataframe for removal test
+dbWriteTable(con, "iris2", iris)
+
+# Glue method
+system.time(dbRemoveTable(con, "iris2", confirm = T))
+# user  system elapsed 
+# 0.065   0.009   1.303 
+```
+
+* `dbWriteTable` now supports uploading json lines (http://jsonlines.org/) format up to `AWS Athena` (#88).
+
+```
+library(DBI)
+
+con = dbConnect(RAthena::athena())
+
+dbWriteTable(con, "iris2", iris, file.type = "json")
+
+dbGetQuery(con, "select * from iris2")
+```
+
+## Bug Fix
+* `dbWriteTable` appending to existing table compress file type was incorrectly return.
+* `install_boto` added `numpy` to `RAthena` environment install as `reticulate` appears to favour environments with `numpy` (https://github.com/rstudio/reticulate/issues/216)
+* `Rstudio connection tab` comes into an issue when Glue Table isn't stored correctly (#92)
+
+## Documentation
+* Added supported environmental variable `AWS_REGION` into `dbConnect`
+* Vignettes added:
+  * AWS Athena Query Cache
+  * AWS S3 backend
+  * Changing Backend File Parser
+  * Getting Started
+
+## Unit tests:
+* Increase coverage to + 80%
+
 # RAthena 1.7.1
 ## Bug Fix
 * Dependency data.table now restricted to (>=1.12.4) due to file compression being added to `fwrite` (>=1.12.4) https://github.com/Rdatatable/data.table/blob/master/NEWS.md
-
+* Thanks to @OssiLehtinen for fixing date variables being incorrectly translated by `sql_translate_env` (#44)
 ```
 # Before
 translate_sql("2019-01-01", con = con) -> '2019-01-01'
@@ -9,8 +65,6 @@ translate_sql("2019-01-01", con = con) -> '2019-01-01'
 # Now
 translate_sql("2019-01-01", con = con) -> DATE '2019-01-01'
 ```
-
-* Thanks to @OssiLehtinen for fixing date variables being incorrectly translated by `sql_translate_env` (#44)
 * R functions `paste`/`paste0` would use default `dplyr:sql-translate-env` (`concat_ws`). `paste0` now uses Presto's `concat` function and `paste` now uses pipes to get extra flexible for custom separating values.
 
 ```

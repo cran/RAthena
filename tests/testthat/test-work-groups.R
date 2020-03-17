@@ -10,7 +10,6 @@ test_that("Create and Delete Athena Work Groups",{
   skip_if_no_env()
   # Test connection is using AWS CLI to set profile_name 
   con <- dbConnect(RAthena::athena(),
-                   profile_name = "rathena",
                    s3_staging_dir = Sys.getenv("rathena_s3_query"))
   
   output1 <- list_work_groups(con)
@@ -33,6 +32,14 @@ test_that("Create and Delete Athena Work Groups",{
   
   dbDisconnect(con)
   
+  
+  expect_error(create_work_group(con, "demo_work_group", description = "This is a demo work group",
+                                 tags = tag_options(key= "demo_work_group", value = "demo_01")))
+  expect_error(delete_work_group(con, "demo_work_group"))
+  expect_error(list_work_groups(con))
+  expect_error(get_work_group(con))
+  expect_error(update_work_group(con, "demo_work_group", 
+                                 description = "This is a demo work group update"))
   expect_equal(any(grepl("demo_work_group", output1)), FALSE)
   expect_equal(any(grepl("demo_work_group", output2)), TRUE)
   expect_equal(any(grepl("demo_work_group", output3)), FALSE)

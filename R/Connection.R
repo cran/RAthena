@@ -5,6 +5,9 @@ NULL
 #'
 #' Implementations of pure virtual functions defined in the `DBI` package
 #' for AthenaConnection objects.
+#' @slot ptr a list of connecting objects from the python SDK boto3.
+#' @slot info a list of metadata objects
+#' @slot quote syntax to quote sql query when creating Athena ddl
 #' @name AthenaConnection
 #' @inheritParams methods::show
 NULL
@@ -48,10 +51,8 @@ AthenaConnection <-
     if(is.null(s3_staging_dir)) {stop("Please set `s3_staging_dir` either in parameter `s3_staging_dir`, environmental varaible `AWS_ATHENA_S3_STAGING_DIR`",
                                       "or when work_group is defined in `create_work_group()`", call. = F)}
     
-    
-    
     info <- list(profile_name = profile_name, s3_staging = s3_staging_dir,
-                 dbms.name = schema_name, work_group = work_group,
+                 dbms.name = schema_name, work_group = work_group %||% "primary",
                  poll_interval = poll_interval, encryption_option = encryption_option,
                  kms_key = kms_key, expiration = aws_expiration)
     
@@ -228,7 +229,11 @@ setMethod(
     if (!dbIsValid(conn)) {stop("Connection already closed.", call. = FALSE)}
     s3_staging_dir <- conn@info$s3_staging
     res <- AthenaResult(conn =conn, statement= statement, s3_staging_dir = s3_staging_dir)
-    poll(res)
+    poll_result <- poll(res)
+    
+    # cache query metadata if caching is enabled
+    if (athena_option_env$cache_size > 0) cache_query(poll_result)
+    
     res
   }
 )
@@ -595,8 +600,10 @@ setMethod(
                error = function(e) py_error(e))
     }
     
-    res <- dbExecute(conn, paste("DROP TABLE ", paste(dbms.name, Table, sep = "."), ";"))
-    dbClearResult(res)
+    # use glue to remove table from glue catalog
+    tryCatch(glue$delete_table(DatabaseName = dbms.name, Name = Table),
+             error = function(e) py_error(e))
+    
     if (!delete_data) message("Info: Only Athena table has been removed.")
     on_connection_updated(conn, Table)
     invisible(TRUE)
