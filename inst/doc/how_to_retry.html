@@ -13,7 +13,7 @@
 <meta name="author" content="Dyfan Jones" />
 
 
-<title>Changing Backend File Parser</title>
+<title>How to Retry?</title>
 
 
 
@@ -298,97 +298,51 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<h1 class="title toc-ignore">Changing Backend File Parser</h1>
+<h1 class="title toc-ignore">How to Retry?</h1>
 <h4 class="author">Dyfan Jones</h4>
 
 
 
-<div id="intro" class="section level1">
-<h1>Intro</h1>
-<p><code>RAthena</code> is dependent on <code>data.table</code> to read data into <code>R</code>. This is down to the amazing speed <code>data.table</code> offers when reading files into <code>R</code>. However a new package, with equally impressive read speeds, has come onto the scene called <a href="https://github.com/r-lib/vroom"><code>vroom</code></a>. As <code>vroom</code> has been designed to only read data into <code>R</code>, similarly to <code>readr</code>, <code>data.table</code> is still used for all of the heavy lifting. However if a user wishes to use <code>vroom</code> as the file parser, <code>RAthena_options</code> function has been created to enable this:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" title="1"><span class="kw">library</span>(DBI)</a>
-<a class="sourceLine" id="cb1-2" title="2"><span class="kw">library</span>(RAthena)</a>
-<a class="sourceLine" id="cb1-3" title="3"></a>
-<a class="sourceLine" id="cb1-4" title="4">con =<span class="st"> </span><span class="kw">dbConnect</span>(<span class="kw">athena</span>())</a>
-<a class="sourceLine" id="cb1-5" title="5"></a>
-<a class="sourceLine" id="cb1-6" title="6"><span class="kw">RAthena_options</span>(<span class="dt">file_parser =</span> <span class="kw">c</span>(<span class="st">&quot;data.table&quot;</span>, <span class="st">&quot;vroom&quot;</span>))</a></code></pre></div>
-<p>By setting the <code>file_parser</code> to <code>&quot;vroom&quot;</code> then the backend will change to allow <code>vroom</code>’s file parser to be used instead of <code>data.table</code>.</p>
-</div>
-<div id="change-back-to-data.table" class="section level1">
-<h1>Change back to <code>data.table</code></h1>
-<p>To go back to using <code>data.table</code> as the file parser it is a simple as calling the <code>RAthena_options</code> function:</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" title="1"><span class="co"># return to using data.table as file parser</span></a>
-<a class="sourceLine" id="cb2-2" title="2"><span class="kw">RAthena_options</span>()</a></code></pre></div>
-</div>
-<div id="swapping-on-the-fly" class="section level1">
-<h1>Swapping on the fly</h1>
-<p>This makes it very flexible to swap between each file parser even between each query execution:</p>
+<p>With most applications that connect to an API, unnecessary exceptions can be returned back to the caller in the case of transient network or service issues. To avoid this <code>RAthena</code> has implemented a retry method with exponential backoff. This technique increases the reliability of the application with connecting to <code>AWS Athena</code>.</p>
+<div id="how-to-handle-rathenas-retry" class="section level1">
+<h1>How to handle <code>RAthena</code>’s retry?</h1>
+<p>By default <code>RAthena</code> performs a retry noisily, this means it will report the exception it has encountered and let the user know how long <code>RAthena</code> will wait until it retries again. This is reported in the following format:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" title="1">{expection message} <span class="op">+</span><span class="st"> &quot;Request failed. Retrying in &quot;</span> <span class="op">+</span><span class="st"> </span>{wait time}  <span class="op">+</span><span class="st"> &quot; seconds...&quot;</span></a></code></pre></div>
+<p>This is to keep the user informed in what <code>RAthena</code> is doing behind the scenes.</p>
+<div id="configure" class="section level2">
+<h2>Configure</h2>
+<p>By default <code>RAthena</code> retries 5 times and does it noisily. To configure this, <code>RAthena_options</code> has been give 2 extra parameters <code>retry</code> and <code>retry_quiet</code>. <code>retry</code> is the number of retries <code>RAthena</code> will perform. <code>retry_quiet</code> tells <code>RAthena</code> to retry quietly or not.</p>
+<p>We can change the default retry settings so that <code>RAthena</code> will retry 10 times and do it quietly:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" title="1"><span class="kw">RAthena_options</span>(<span class="dt">retry =</span> <span class="dv">10</span>, <span class="dt">retry_quiet =</span> <span class="ot">TRUE</span>)</a></code></pre></div>
+<p>If you wish to create your own custom retry function just set the <code>retry</code> to 0:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" title="1"><span class="kw">library</span>(DBI)</a>
 <a class="sourceLine" id="cb3-2" title="2"><span class="kw">library</span>(RAthena)</a>
 <a class="sourceLine" id="cb3-3" title="3"></a>
-<a class="sourceLine" id="cb3-4" title="4">con =<span class="st"> </span><span class="kw">dbConnect</span>(<span class="kw">athena</span>())</a>
-<a class="sourceLine" id="cb3-5" title="5"></a>
-<a class="sourceLine" id="cb3-6" title="6"><span class="co"># upload data</span></a>
-<a class="sourceLine" id="cb3-7" title="7"><span class="kw">dbWriteTable</span>(con, <span class="st">&quot;iris&quot;</span>, iris)</a>
-<a class="sourceLine" id="cb3-8" title="8"></a>
-<a class="sourceLine" id="cb3-9" title="9"><span class="co"># use default data.table file parser</span></a>
-<a class="sourceLine" id="cb3-10" title="10">df1 =<span class="st"> </span><span class="kw">dbGetQuery</span>(con, <span class="st">&quot;select * from iris&quot;</span>)</a>
-<a class="sourceLine" id="cb3-11" title="11"></a>
-<a class="sourceLine" id="cb3-12" title="12"><span class="co"># use vroom as file parser</span></a>
-<a class="sourceLine" id="cb3-13" title="13"><span class="kw">RAthena_options</span>(<span class="st">&quot;vroom&quot;</span>)</a>
-<a class="sourceLine" id="cb3-14" title="14">df2 =<span class="st"> </span><span class="kw">dbGetQuery</span>(con, <span class="st">&quot;select * from iris&quot;</span>)</a>
-<a class="sourceLine" id="cb3-15" title="15"></a>
-<a class="sourceLine" id="cb3-16" title="16"><span class="co"># return back to data.table file parser</span></a>
-<a class="sourceLine" id="cb3-17" title="17"><span class="kw">RAthena_options</span>()</a>
-<a class="sourceLine" id="cb3-18" title="18">df3 =<span class="st"> </span><span class="kw">dbGetQuery</span>(con, <span class="st">&quot;select * from iris&quot;</span>)</a></code></pre></div>
+<a class="sourceLine" id="cb3-4" title="4"><span class="co"># connection to AWS Athena</span></a>
+<a class="sourceLine" id="cb3-5" title="5">con =<span class="st"> </span><span class="kw">dbConnect</span>(<span class="kw">athena</span>())</a>
+<a class="sourceLine" id="cb3-6" title="6"></a>
+<a class="sourceLine" id="cb3-7" title="7"><span class="co"># Stop RAthena retrying</span></a>
+<a class="sourceLine" id="cb3-8" title="8"><span class="kw">RAthena_options</span>(<span class="dt">retry =</span> <span class="dv">0</span>)</a>
+<a class="sourceLine" id="cb3-9" title="9"></a>
+<a class="sourceLine" id="cb3-10" title="10"><span class="co"># build your own custom retry function</span></a>
+<a class="sourceLine" id="cb3-11" title="11">custom_retry =<span class="st"> </span><span class="cf">function</span>(x){</a>
+<a class="sourceLine" id="cb3-12" title="12">  <span class="co"># your custom retry method</span></a>
+<a class="sourceLine" id="cb3-13" title="13">}</a>
+<a class="sourceLine" id="cb3-14" title="14"></a>
+<a class="sourceLine" id="cb3-15" title="15"><span class="co"># apply your own retry function</span></a>
+<a class="sourceLine" id="cb3-16" title="16"><span class="kw">custom_retry</span>(<span class="kw">dbGetQuery</span>(con, <span class="st">&quot;select ...&quot;</span>))</a></code></pre></div>
 </div>
-<div id="why-should-you-consider-vroom" class="section level1">
-<h1>Why should you consider <code>vroom</code>?</h1>
-<p>If you aren’t sure whether to use <code>vroom</code> over <code>data.table</code>, I draw your attention to <code>vroom</code> boasting a whopping 1.40GB/sec throughput.</p>
-<blockquote>
-<p><em>Statistics taken from vroom’s github readme</em></p>
-</blockquote>
-<table>
-<thead>
-<tr class="header">
-<th>package</th>
-<th>version</th>
-<th>time (sec)</th>
-<th>speed-up</th>
-<th>throughput</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>vroom</td>
-<td>1.1.0</td>
-<td>1.14</td>
-<td>58.44</td>
-<td>1.40 GB/sec</td>
-</tr>
-<tr class="even">
-<td>data.table</td>
-<td>1.12.8</td>
-<td>11.88</td>
-<td>5.62</td>
-<td>134.13 MB/sec</td>
-</tr>
-<tr class="odd">
-<td>readr</td>
-<td>1.3.1</td>
-<td>29.02</td>
-<td>2.30</td>
-<td>54.92 MB/sec</td>
-</tr>
-<tr class="even">
-<td>read.delim</td>
-<td>3.6.2</td>
-<td>66.74</td>
-<td>1.00</td>
-<td>23.88 MB/sec</td>
-</tr>
-</tbody>
-</table>
+</div>
+<div id="requests" class="section level1">
+<h1>Requests</h1>
+<p>If you wish to increase the retry functionality of <code>RAthena</code> for example the use of different backoff algorithms, please raise a ticket at <a href="https://github.com/DyfanJones/RAthena/issues">issues</a> or raise a pull request.</p>
+</div>
+<div id="reading-material" class="section level1">
+<h1>Reading material</h1>
+<ul>
+<li><a href="https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/">Exponential Backoff and Jitter</a></li>
+<li><a href="https://aws.amazon.com/blogs/messaging-and-targeting/how-to-handle-a-throttling-maximum-sending-rate-exceeded-error/">How to handle a “Throttling – Maximum sending rate exceeded” error</a></li>
+</ul>
 </div>
 
 

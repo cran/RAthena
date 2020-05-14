@@ -12,10 +12,9 @@ AthenaResult <- function(conn,
   response <- list(QueryExecutionId = NULL)
   if (athena_option_env$cache_size > 0) response <- list(QueryExecutionId = check_cache(statement, conn@info$work_group))
   if (is.null(response$QueryExecutionId)) {
-    tryCatch(response <- list(QueryExecutionId = do.call(Athena$start_query_execution, Request, quote = T)$QueryExecutionId),
-             error = function(e) py_error(e))}
+    retry_api_call(response <- list(QueryExecutionId = do.call(Athena$start_query_execution, Request, quote = T)$QueryExecutionId))}
   on.exit(if(!is.null(conn@info$expiration)) time_check(conn@info$expiration))
-  new("AthenaResult", connection = conn, athena = Athena, info = response)
+  new("AthenaResult", connection = conn, athena = Athena, info = c(response, list(NextToken = NULL)))
 }
 
 #' @rdname AthenaConnection
@@ -39,7 +38,7 @@ setClass(
 #' @return \code{dbClearResult()} returns \code{TRUE}, invisibly.
 #' @seealso \code{\link[DBI]{dbIsValid}}
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # Note: 
 #' # - Require AWS Account to run below example.
 #' # - Different connection methods can be used please see `RAthena::dbConnect` documnentation
@@ -68,23 +67,20 @@ setMethod(
     } else {
       
       # checks status of query
-      tryCatch(query_execution <- res@athena$get_query_execution(QueryExecutionId = res@info$QueryExecutionId),
-               error = function(e) py_error(e))
+      retry_api_call(query_execution <- res@athena$get_query_execution(QueryExecutionId = res@info$QueryExecutionId))
       
       # stops resource if query is still running
       if (!(query_execution$QueryExecution$Status$State %in% c("SUCCEEDED", "FAILED", "CANCELLED"))){
-        tryCatch(res@athena$stop_query_execution(QueryExecutionId = res@info$QueryExecutionId),
-                 error = function(e) py_error(e))}
+        retry_api_call(res@athena$stop_query_execution(QueryExecutionId = res@info$QueryExecutionId))}
       
       # clear s3 athena output
       tryCatch(s3 <- res@connection@ptr$resource("s3"),
                error = function(e) py_error(e))
       
       # split s3_uri
-      s3_info <- split_s3_uri(res@connection@info$s3_staging)
       result_info <- split_s3_uri(query_execution$QueryExecution$ResultConfiguration$OutputLocation)
       
-      tryCatch(bucket <- s3$Bucket(s3_info$bucket),
+      tryCatch(bucket <- s3$Bucket(result_info$bucket),
                error = function(e) py_error(e))
       
       # remove class pointers
@@ -93,11 +89,15 @@ setMethod(
       
       # for caching s3 data is still required
       if (athena_option_env$cache_size == 0){
-        # Out put Python error as warning if s3 resource can't be dropped
-        tryCatch(s3$Object(s3_info$bucket, paste0(result_info$key, ".metadata"))$delete(),
+        # Output Python error as warning if s3 resource can't be dropped
+        tryCatch(s3$Object(result_info$bucket, paste0(result_info$key, ".metadata"))$delete(),
                  error = function(e) py_warning(e))
-        tryCatch(s3$Object(s3_info$bucket, result_info$key)$delete(),
-                 error = function(e) cat(""))}
+        tryCatch(s3$Object(result_info$bucket, result_info$key)$delete(),
+                 error = function(e) cat(""))
+        # remove manifest csv created with CTAS statements 
+        if (query_execution$QueryExecution$StatementType == "DDL")
+          tryCatch(s3$Object(result_info$bucket, paste0(result_info$key, "-manifest.csv"))$delete(),
+                   error = function(e) cat(""))}
     }
     invisible(TRUE)
   })
@@ -113,7 +113,7 @@ setMethod(
 #' @return \code{dbFetch()} returns a data frame.
 #' @seealso \code{\link[DBI]{dbFetch}}
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # Note: 
 #' # - Require AWS Account to run below example.
 #' # - Different connection methods can be used please see `RAthena::dbConnect` documnentation
@@ -152,17 +152,59 @@ setMethod(
       stop(result$QueryExecution$Status$StateChangeReason, call. = FALSE)
     }
     
+    # return metadata of athena data types
+    retry_api_call(result_class <- res@athena$get_query_results(QueryExecutionId = res@info$QueryExecutionId,
+                                                                MaxResults = as.integer(1))$ResultSet$ResultSetMetadata$ColumnInfo)
+    
     if(n >= 0 && n !=Inf){
-      n = as.integer(n + 1)
-      if (n > 1000){n = 1000L; message("Info: n has been restricted to 1000 due to AWS Athena limitation")}
-      tryCatch(result <- res@athena$get_query_results(QueryExecutionId = res@info$QueryExecutionId, MaxResults = n),
-               error = function(e) py_error(e))
+      # assign token from AthenaResult class
+      token <- res@info$NextToken
       
-      output <- lapply(result$ResultSet$Rows, function(x) (sapply(x$Data, function(x) if(length(x) == 0 ) NA else x)))
-      dt <- rbindlist(output, fill = TRUE)
-      colnames(dt) <- as.character(unname(dt[1,]))
-      rownames(dt) <- NULL
-      return(dt[-1,])
+      if(length(token) == 0) n <- as.integer(n + 1)
+      chunk = as.integer(n)
+      if (n > 1000L) chunk = 1000L
+      
+      iterate <- 1:ceiling(n/chunk)
+      
+      # create empty list shell
+      dt_list <- list()
+      length(dt_list) <- max(iterate)
+      
+      for (i in iterate){
+        if(i == max(iterate)) chunk <- as.integer(n - (i-1) * chunk)
+        
+        # get chunk with retry api call if call fails
+        if(length(token) == 0) {retry_api_call(result <- res@athena$get_query_results(QueryExecutionId = res@info$QueryExecutionId, MaxResults = chunk))
+          } else {retry_api_call(result <- res@athena$get_query_results(QueryExecutionId = res@info$QueryExecutionId, NextToken = token, MaxResults = chunk))}
+        
+        # process returned list
+        output <- lapply(result$ResultSet$Rows, function(x) (sapply(x$Data, function(x) if(length(x) == 0 ) NA else x)))
+        suppressWarnings(staging_dt <- rbindlist(output, use.names = FALSE))
+        
+        # remove colnames from first row
+        if (i == 1 && length(token) == 0){
+          staging_dt <- staging_dt[-1,]
+        }
+        
+        # ensure rownames are not set
+        rownames(staging_dt) <- NULL
+        
+        # added staging data.table to list
+        dt_list[[i]] <- staging_dt
+        
+        # if token hasn't changed or if no more tokens are available then break loop
+        if ((length(token) != 0 && token == result$NextToken) || length(result$NextToken) == 0) {break} else {token <- result$NextToken}
+      }
+      # combined all lists together
+      dt <- rbindlist(dt_list, use.names = FALSE)
+      
+      # Update Token in s4 class
+      eval.parent(substitute(res@info$NextToken <- result$NextToken))
+      
+      # replace names with actual names
+      Names <- sapply(result_class, function(x) x$Name)
+      colnames(dt) <- Names
+      return(dt)
     }
     
     # Added data scan information when returning data from athena
@@ -177,13 +219,7 @@ setMethod(
              error = function(e) py_error(e))
     
     # download athena output
-    tryCatch(s3$Bucket(result_info$bucket)$download_file(result_info$key, File),
-             error = function(e) py_error(e))
-    
-    # return metadata of athena data types
-    tryCatch(result_class <- res@athena$get_query_results(QueryExecutionId = res@info$QueryExecutionId,
-                                                          MaxResults = as.integer(1))$ResultSet$ResultSetMetadata$ColumnInfo,
-             error = function(e) py_error(e))
+    retry_api_call(s3$Bucket(result_info$bucket)$download_file(result_info$key, File))
     
     if(grepl("\\.csv$",result_info$key)){
       output <- athena_read(athena_option_env$file_parser, File, result_class)
@@ -206,7 +242,7 @@ setMethod(
 #' @return \code{dbHasCompleted()} returns a logical scalar. \code{TRUE} if the query has completed, \code{FALSE} otherwise.
 #' @seealso \code{\link[DBI]{dbHasCompleted}}
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # Note: 
 #' # - Require AWS Account to run below example.
 #' # - Different connection methods can be used please see `RAthena::dbConnect` documnentation
@@ -234,8 +270,7 @@ setMethod(
   "dbHasCompleted", "AthenaResult",
   function(res, ...) {
     if (!dbIsValid(res)) {stop("Result already cleared", call. = FALSE)}
-    tryCatch(query_execution <- res@athena$get_query_execution(QueryExecutionId = res@info$QueryExecutionId),
-             error = function(e) py_error(e))
+    retry_api_call(query_execution <- res@athena$get_query_execution(QueryExecutionId = res@info$QueryExecutionId))
     
     if(query_execution$QueryExecution$Status$State %in% c("SUCCEEDED", "FAILED", "CANCELLED")) TRUE
     else if (query_execution$QueryExecution$Status$State == "RUNNING") FALSE
@@ -271,7 +306,7 @@ setMethod(
 #'         The data.frame has two columns (field_name, type).
 #' @seealso \code{\link[DBI]{dbHasCompleted}}
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # Note: 
 #' # - Require AWS Account to run below example.
 #' # - Different connection methods can be used please see `RAthena::dbConnect` documnentation
@@ -303,8 +338,7 @@ setMethod(
       stop(result$QueryExecution$Status$StateChangeReason, call. = FALSE)
     }
     
-    tryCatch(result <- res@athena$get_query_results(QueryExecutionId = res@info$QueryExecutionId, MaxResults = as.integer(1)),
-             error = function(e) py_error(e))
+    retry_api_call(result <- res@athena$get_query_results(QueryExecutionId = res@info$QueryExecutionId, MaxResults = as.integer(1)))
     
     Name <- sapply(result$ResultSet$ResultSetMetadata$ColumnInfo, function(x) x$Name)
     Type <- sapply(result$ResultSet$ResultSetMetadata$ColumnInfo, function(x) x$Type)
@@ -320,7 +354,7 @@ setMethod(
 #' @name dbStatistics
 #' @return \code{dbStatistics()} returns list containing Athena Statistics return from \code{boto3}.
 #' @examples 
-#' \donttest{
+#' \dontrun{
 #' # Note: 
 #' # - Require AWS Account to run below example.
 #' # - Different connection methods can be used please see `RAthena::dbConnect` documnentation

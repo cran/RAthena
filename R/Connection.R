@@ -40,6 +40,10 @@ AthenaConnection <-
                           ...),
       error = function(e) py_error(e))
     
+    # stop connection if region_name is not set in backend or hardcoded
+    if(is.null(ptr$region_name)) stop("AWS `region_name` is required to be set. Please set `region` in .config file, ",
+                                      "`AWS_REGION` in environment variables or `region_name` hard coded in `dbConnect()`.", call. = FALSE)
+    
     if(is.null(s3_staging_dir) && !is.null(work_group)){
       Athena <- ptr$client("athena")
       tryCatch(s3_staging_dir <- Athena$get_work_group(WorkGroup = work_group)$WorkGroup$Configuration$ResultConfiguration$OutputLocation,
@@ -88,7 +92,7 @@ setMethod(
 #' @return \code{dbDisconnect()} returns \code{TRUE}, invisibly.
 #' @seealso \code{\link[DBI]{dbDisconnect}}
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # Note: 
 #' # - Require AWS Account to run below example.
 #' # - Different connection methods can be used please see `RAthena::dbConnect` documnentation
@@ -125,7 +129,7 @@ setMethod(
 #' @return \code{dbIsValid()} returns logical scalar, \code{TRUE} if the object (\code{dbObj}) is valid, \code{FALSE} otherwise.
 #' @seealso \code{\link[DBI]{dbIsValid}}
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # Note: 
 #' # - Require AWS Account to run below example.
 #' # - Different connection methods can be used please see `RAthena::dbConnect` documnentation
@@ -173,7 +177,7 @@ setMethod(
 #' @return Returns \code{AthenaResult} s4 class.
 #' @seealso \code{\link[DBI]{dbSendQuery}}, \code{\link[DBI]{dbSendStatement}}, \code{\link[DBI]{dbExecute}}
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # Note: 
 #' # - Require AWS Account to run below example.
 #' # - Different connection methods can be used please see `RAthena::dbConnect` documnentation
@@ -231,6 +235,11 @@ setMethod(
     res <- AthenaResult(conn =conn, statement= statement, s3_staging_dir = s3_staging_dir)
     poll_result <- poll(res)
     
+    # if query failed stop
+    if(poll_result$QueryExecution$Status$State == "FAILED") {
+      stop(poll_result$QueryExecution$Status$StateChangeReason, call. = FALSE)
+    }
+    
     # cache query metadata if caching is enabled
     if (athena_option_env$cache_size > 0) cache_query(poll_result)
     
@@ -258,7 +267,7 @@ setMethod(
 #' vapply(iris, function(x) dbDataType(RAthena::athena(), x),
 #'        FUN.VALUE = character(1), USE.NAMES = TRUE)
 #' 
-#' \donttest{
+#' \dontrun{
 #' # Note: 
 #' # - Require AWS Account to run below example.
 #' # - Different connection methods can be used please see `RAthena::dbConnect` documnentation
@@ -354,8 +363,7 @@ setMethod(
     glue <- conn@ptr$client("glue")
     
     if(is.null(schema)){
-      tryCatch(schema <- sapply(glue$get_databases()$DatabaseList,function(x) x$Name),
-               error = function(e) py_error(e))}
+      retry_api_call(schema <- sapply(glue$get_databases()$DatabaseList,function(x) x$Name))}
     tryCatch(output <- lapply(schema, function (x) glue$get_tables(DatabaseName = x)$TableList),
              error = function(e) py_error(e))
     unlist(lapply(output, function(x) sapply(x, function(y) y$Name)))
@@ -402,8 +410,7 @@ setMethod("dbGetTables", "AthenaConnection",
     if (!dbIsValid(conn)) {stop("Connection already closed.", call. = FALSE)}
     glue <- conn@ptr$client("glue")
   if(is.null(schema)){
-    tryCatch(schema <- sapply(glue$get_databases()$DatabaseList,function(x) x$Name),
-             error = function(e) py_error(e))}
+    retry_api_call(schema <- sapply(glue$get_databases()$DatabaseList,function(x) x$Name))}
   tryCatch(output <- lapply(schema, function (x) glue$get_tables(DatabaseName = x)$TableList),
            error = function(e) py_error(e))
   rbindlist(lapply(output, function(x) rbindlist(lapply(x, function(y) data.frame(Schema = y$DatabaseName,
@@ -514,11 +521,25 @@ setMethod(
     Table <- tolower(name)}
     
     glue <- conn@ptr$client("glue")
-    tryerror <- try(tryCatch(glue$get_table(DatabaseName = dbms.name, Name = Table),
-                             error = function(e) py_error(e)), silent = TRUE)
-    if(inherits(tryerror, "try-error") && !grepl(".*table.*not.*found.*", tryerror[1], ignore.case = T)){
-      stop(gsub("^Error : ", "", tryerror[1]), call. = F)}
-    !grepl(".*table.*not.*found.*", tryerror[1], ignore.case = T)
+
+    for (i in seq_len(athena_option_env$retry)) {
+      resp <- tryCatch(glue$get_table(DatabaseName = dbms.name, Name = Table), 
+                       error = function(e) retry_error(e))
+      
+      # exponential step back if error and not expected error
+      if(inherits(resp, "error") && !grepl(".*table.*not.*found.*", resp, ignore.case = T)){
+        backoff_len <- runif(n=1, min=0, max=(2^i - 1))
+        
+        if(!athena_option_env$retry_quiet) message(resp, "Request failed. Retrying in ", round(backoff_len, 1), " seconds...")
+        
+        Sys.sleep(backoff_len)
+      } else {break}
+    }
+    
+    
+    if (inherits(resp, "error") && !grepl(".*table.*not.*found.*", resp, ignore.case = T)) stop(resp)
+    
+    !grepl(".*table.*not.*found.*", resp[1], ignore.case = T)
   })
 
 
@@ -617,7 +638,7 @@ setMethod(
 #' @return \code{dbGetQuery()} returns a dataframe.
 #' @seealso \code{\link[DBI]{dbGetQuery}}
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # Note: 
 #' # - Require AWS Account to run below example.
 #' # - Different connection methods can be used please see `RAthena::dbConnect` documnentation
@@ -659,7 +680,7 @@ setMethod(
 #' @return a named list
 #' @seealso \code{\link[DBI]{dbGetInfo}}
 #' @examples 
-#' \donttest{
+#' \dontrun{
 #' # Note: 
 #' # - Require AWS Account to run below example.
 #' # - Different connection methods can be used please see `RAthena::dbConnect` documnentation
@@ -804,4 +825,97 @@ setMethod(
     } else {dbms.name <- conn@info$dbms.name
     Table <- name}
     SQL(dbGetQuery(conn, paste0("SHOW CREATE TABLE ", dbms.name,".",Table))[[1]])
+  })
+
+#' Simple wrapper to convert Athena backend file types
+#' 
+#' @description Utilises AWS Athena to convert AWS S3 backend file types. It also also to create more efficient file types i.e. "parquet" and "orc" from SQL queries.
+#' @param conn An \code{\linkS4class{AthenaConnection}} object, produced by [DBI::dbConnect()]
+#' @param obj Athena table or \code{SQL} DML query to be converted. For \code{SQL}, the query need to be wrapped with \code{DBI::SQL()} and 
+#'            follow AWS Athena DML format \href{https://docs.aws.amazon.com/athena/latest/ug/select.html}{link}
+#' @param name Name of destination table
+#' @param partition Partition Athena table
+#' @param s3.location location to store output file, must be in s3 uri format for example ("s3://mybucket/data/").
+#' @param file.type File type for \code{name}, currently support ["NULL","csv", "tsv", "parquet", "json", "orc"]. 
+#'                  \code{"NULL"} will let Athena set the file type for you.
+#' @param compress Compress \code{name}, currently can only compress ["parquet", "orc"] (\href{https://docs.aws.amazon.com/athena/latest/ug/create-table-as.html}{AWS Athena CTAS})
+#' @param data If \code{name} should be created with data or not.
+#' @param ... Extra parameters, currently not used
+#' @name dbConvertTable
+#' @return \code{dbConvertTable()} returns \code{TRUE} but invisible.
+#' @examples 
+#' \dontrun{
+#' # Note: 
+#' # - Require AWS Account to run below example.
+#' # - Different connection methods can be used please see `RAthena::dbConnect` documnentation
+#' 
+#' library(DBI)
+#' library(RAthena)
+#' 
+#' # Demo connection to Athena using profile name 
+#' con <- dbConnect(athena())
+#'                  
+#' # write iris table to Athena in defualt delimited format                 
+#' dbWriteTable(con, "iris", iris)
+#' 
+#' # convert delimited table to parquet
+#' dbConvertTable(con, 
+#'               obj = "iris",
+#'               name = "iris_parquet",
+#'               file.type = "parquet")
+#' 
+#' # Create partitioned table from non-partitioned 
+#' # iris table using SQL DML query
+#' dbConvertTable(con,
+#'                obj = SQL("select 
+#'                             iris.*, 
+#'                             date_format(current_date, '%Y%m%d') as time_stamp 
+#'                           from iris"),
+#'                name = "iris_orc_partitioned",
+#'                file.type = "orc",
+#'                partition = "time_stamp")
+#' 
+#' # disconnect from Athena
+#' dbDisconnect(con)
+#' }
+#' @docType methods
+NULL
+
+#' @rdname dbConvertTable
+#' @export
+setGeneric("dbConvertTable",
+           def = function(conn, obj, name, ...) standardGeneric("dbConvertTable"))
+
+#' @rdname dbConvertTable
+#' @export
+setMethod(
+  "dbConvertTable", "AthenaConnection",
+   function(conn, 
+            obj,
+            name,
+            partition = NULL,
+            s3.location = NULL,
+            file.type = c("NULL","csv", "tsv", "parquet", "json", "orc"),
+            compress = TRUE,
+            data = TRUE,
+            ...){
+     if (!dbIsValid(conn)) {stop("Connection already closed.", call. = FALSE)}
+     stopifnot(is.character(obj),
+               is.character(name),
+               is.null(partition) || is.character(partition),
+               is.null(s3.location) || is.s3_uri(s3.location),
+               is.logical(compress),
+               is.logical(data))
+     file.type = match.arg(file.type)
+     
+     with_data <- if (data) " " else " NO "
+     
+     ins <- if(inherits(obj, "SQL")) {obj} else {paste0("SELECT * FROM ",paste0('"',unlist(strsplit(obj,"\\.")),'"', collapse = '.'))}
+     
+     tt_sql <- paste0("CREATE TABLE ",paste0('"',unlist(strsplit(name,"\\.")),'"', collapse = '.'),
+                      " ", ctas_sql_with(partition, s3.location, file.type, compress), "AS ",
+                      ins,"\nWITH", with_data, "DATA", ";")
+     res <- dbExecute(conn, tt_sql)
+     dbClearResult(res)
+     return(invisible(TRUE))
   })

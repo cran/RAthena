@@ -1,10 +1,46 @@
+# RAthena 1.9.0
+## New Feature
+* functions that collect or push to AWS S3 now have a retry capability. Meaning if API call fails then the call is retried ([noctua: # 79](https://github.com/DyfanJones/noctua/issues/79))
+* `RAthena_options` contains 2 new parameters to control how `RAthena` handles retries.
+* `dbFetch` is able to return data from AWS Athena in chunk. This has been achieved by passing `NextToken` to `AthenaResult` s4 class. This method won't be as fast `n = -1` as each chunk will have to be process into data frame format.
+
+```r
+library(DBI)
+con <- dbConnect(RAthena::athena())
+res <- dbExecute(con, "select * from some_big_table limit 10000")
+dbFetch(res, 5000)
+```
+
+* When creating/appending partitions to a table, `dbWriteTable` opts to use `alter table` instead of standard `msck repair table`. This is to improve performance when appending to tables with high number of existing partitions.
+* `dbWriteTable` now allows json to be appended to json ddls created with the Openx-JsonSerDe library.
+* `dbConvertTable` brings `dplyr::compute` functionality to base package, allowing `RAthena` to use the power of AWS Athena to convert tables and queries to more efficient file formats in AWS S3 (#37).
+* Extended `dplyr::compute` to give same functionality of `dbConvertTable`
+* The error message for python's `boto3` not being detected has been updated. This is due to several users not sure how to get `RAthena` set-up.
+
+```
+stop("Boto3 is not detected please install boto3 using either: `pip install boto3 numpy` in terminal or `install_boto()`.",
+     "\nIf this doesn't work please set the python you are using with `reticulate::use_python()` or `reticulate::use_condaenv()`",
+     call. = FALSE)
+```
+
+* Added `region_name` check before making a connection to AWS Athena (#110)
+
+## Bug
+* `dbWriteTable` would throw `throttling error` every now and again, `retry_api_call` as been built to handle the parsing of data between R and AWS S3.
+* `dbWriteTable` did not clear down all metadata when uploading to `AWS Athena`
+
+## Documentation
+* `dbWriteTable` added support ddl structures for user who have created ddl's outside of `RAthena`
+* added vignette around how to use `RAthena` retry functionality
+* Moved all examples requiring credentials to `\dontrun` (#108)
+
 # RAthena 1.8.0
 ## New Feature
 * Inspired by `pyathena`, `RAthena_options` now has a new parameter `cache_size`. This implements local caching in R environments instead of using AWS `list_query_executions`. This is down to `dbClearResult` clearing S3's Athena output when caching isn't disabled
 * `RAthena_options` now has `clear_cache` parameter to clear down all cached data.
 * `dbRemoveTable` now utilise `AWS Glue` to remove tables from `AWS Glue` catalogue. This has a performance enhancement:
 
-```
+```r
 library(DBI)
 
 con = dbConnect(RAthena::athena())
@@ -28,7 +64,7 @@ system.time(dbRemoveTable(con, "iris2", confirm = T))
 
 * `dbWriteTable` now supports uploading json lines (http://jsonlines.org/) format up to `AWS Athena` (#88).
 
-```
+```r
 library(DBI)
 
 con = dbConnect(RAthena::athena())
@@ -58,16 +94,18 @@ dbGetQuery(con, "select * from iris2")
 ## Bug Fix
 * Dependency data.table now restricted to (>=1.12.4) due to file compression being added to `fwrite` (>=1.12.4) https://github.com/Rdatatable/data.table/blob/master/NEWS.md
 * Thanks to @OssiLehtinen for fixing date variables being incorrectly translated by `sql_translate_env` (#44)
-```
+```r
 # Before
-translate_sql("2019-01-01", con = con) -> '2019-01-01'
+dbplyr::translate_sql("2019-01-01", con = con)
+# '2019-01-01'
 
 # Now
-translate_sql("2019-01-01", con = con) -> DATE '2019-01-01'
+dbplyr::translate_sql("2019-01-01", con = con)
+# DATE '2019-01-01'
 ```
-* R functions `paste`/`paste0` would use default `dplyr:sql-translate-env` (`concat_ws`). `paste0` now uses Presto's `concat` function and `paste` now uses pipes to get extra flexible for custom separating values.
+* R functions `paste`/`paste0` would use default `dplyr:sql-translate-env` (`concat_ws`). `paste0` now uses Presto's `concat` function and `paste` now uses pipes to get extra  flexibility for custom separating values.
 
-```
+```r
 # R code:
 paste("hi", "bye", sep = "-")
 
@@ -76,7 +114,7 @@ paste("hi", "bye", sep = "-")
 ```
 * If table exists and parameter `append` set to `TRUE` then existing s3.location will be utilised (#73)
 * `db_compute` returned table name, however when a user wished to write table to another location (#74). An error would be raised: `Error: SYNTAX_ERROR: line 2:6: Table awsdatacatalog.default.temp.iris does not exist` This has now been fixed with db_compute returning `dbplyr::in_schema`.
-```
+```r
 library(DBI)
 library(dplyr)
 
@@ -97,7 +135,7 @@ tbl(con, "iris") %>%
 * `dbGetQuery` has new parameter `statistics` to print out `dbStatistics` before returning Athena results (#67)
 * `s3.location` now follows new syntax `s3://bucket/{schema}/{table}/{partition}/{table_file}` to align with `Pyathena` and to allow tables with same name but in different schema to be uploaded to s3 (#73).
 * Thanks to @OssiLehtinen for improving the speed of `dplyr::tbl` when calling Athena when using the ident method (noctua [# 64](https://github.com/DyfanJones/noctua/issues/64)): 
-```
+```r
 library(DBI)
 library(dplyr)
 
@@ -110,12 +148,12 @@ t1 <- system.time(tbl(con, "iris"))
 t2 <- system.time(tbl(con, sql("select * from iris")))
 
 # ident method
-user  system elapsed 
-0.082   0.012   0.288 
+# user  system elapsed 
+# 0.082   0.012   0.288 
 
 # sub query method
-user  system elapsed 
-0.993   0.138   3.660 
+# user  system elapsed 
+# 0.993   0.138   3.660 
 ```
 
 ## Unit test
@@ -128,17 +166,16 @@ user  system elapsed
 * Added information message of amount of data scanned by AWS Athena
 * Added method to change backend file parser so user can change file parser from `data.table` to `vroom`. From now on it is possible to change file parser using `RAthena_options` for example:
 
-```
+```r
 library(RAthena)
 
 RAthena_options("vroom")
-
 ```
 
 * new function `dbGetTables` that returns Athena hierarchy as a data.frame
 
 ## Unit tests
-* Added datatransfer unit test for backend file parser `vroom`
+* Added data transfer unit test for backend file parser `vroom`
 
 ## Documentation
 Updated R documentation to `roxygen2` 7.0.2
@@ -147,7 +184,7 @@ Updated R documentation to `roxygen2` 7.0.2
 ## Major Change
 * Default delimited file uploaded to AWS Athena changed from "csv" to "tsv" this is due to separating value "," in character variables. By using "tsv" file type JSON/Array objects can be passed to Athena through character types. To prevent this becoming a breaking change `dbWriteTable` `append` parameter checks and uses existing AWS Athena DDL file type. If `file.type` doesn't match Athena DDL file type then user will receive a warning message:
 
-```
+```r
 warning('Appended `file.type` is not compatible with the existing Athena DDL file type and has been converted to "', File.Type,'".', call. = FALSE)
 ```
 ## Minor Change
@@ -174,7 +211,7 @@ warning('Appended `file.type` is not compatible with the existing Athena DDL fil
 * `dbWriteTable` now will split `gzip` compressed files to improve AWS Athena performance. By default `gzip` compressed files will be split into 20.
 
 Performance results
-```
+```r
 library(DBI)
 
 X <- 1e8
@@ -197,7 +234,7 @@ AWS Athena performance results from AWS console (query executed: `select count(*
 * test_split2: (Run time: 3.73 seconds, Data scanned: 1.16 GB)
 * test_split3: (Run time: 5.47 seconds, Data scanned: 1.16 GB)
 
-```
+```r
 library(DBI)
 
 X <- 1e8
@@ -243,7 +280,7 @@ Added information message to inform user about what files have been added to S3 
 
 ## Backend Change
 * helper function `upload_data` has been rebuilt and removed the old "horrible" if statement with `paste` now the function relies on `sprintf` to construct the s3 location path. This method now is a lot clearer in how the s3 location is created plus it enables a `dbWriteTable` to be simplified. `dbWriteTable` can now upload data to the default s3_staging directory created in `dbConnect` this simplifies `dbWriteTable` to :
-```
+```r
 library(DBI)
 
 con <- dbConnect(RAthena::athena())

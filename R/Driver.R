@@ -101,7 +101,7 @@ setMethod(
 #' \dontrun{
 #' # Connect to Athena using your aws access keys
 #'  library(DBI)
-#'  con <- dbConnect(RAthena:athena(),
+#'  con <- dbConnect(RAthena::athena(),
 #'                   aws_access_key_id='YOUR_ACCESS_KEY_ID', # 
 #'                   aws_secret_access_key='YOUR_SECRET_ACCESS_KEY',
 #'                   s3_staging_dir='s3://path/to/query/bucket/',
@@ -116,7 +116,7 @@ setMethod(
 #'  dbDisconnect(con)
 #'  
 #' # Connect to Athena using ARN role
-#'  con <- dbConnect(athena(),
+#'  con <- dbConnect(RAthena::athena(),
 #'                   profile_name = "YOUR_PROFILE_NAME",
 #'                   role_arn = "arn:aws:sts::123456789012:assumed-role/role_name/role_session_name",
 #'                   s3_staging_dir = 's3://path/to/query/bucket/')
@@ -144,8 +144,8 @@ setMethod(
            region_name = NULL,
            botocore_session = NULL, ...) {
     if(!py_module_available("boto3")){
-      stop("Boto3 is not detected please install boto3 using either: `pip install boto3` in terminal or `install_boto()`.
-            Alternatively `reticulate::use_python` or `reticulate::use_condaenv` will have to be used if boto3 is in another environment.",
+      stop("Boto3 is not detected please install boto3 using either: `pip install boto3 numpy` in terminal or `install_boto()`.",
+           "\nIf this doesn't work please set the python you are using with `reticulate::use_python()` or `reticulate::use_condaenv()`",
            call. = FALSE)}
     
     # assert checks on parameters

@@ -213,3 +213,77 @@ check_cache = function(query, work_group){
   query_id = athena_option_env$cache_dt[get("Query") == query & get("State") == "SUCCEEDED" & get("StatementType") == "DML" & get("WorkGroup") == work_group, get("QueryId")]
   if(length(query_id) == 0) return(NULL) else return(query_id[1])
 }
+
+# return python error with error class
+retry_error <-
+  function(e) {
+    e <- py_last_error()$value
+    class(e) <- "error"
+    e
+  }
+
+# If api call fails retry call
+retry_api_call <- function(expr){
+  
+  # if number of retries is equal to 0 then retry is skipped
+  if (athena_option_env$retry == 0) {
+    resp <- tryCatch(eval.parent(substitute(expr)), 
+                     error = function(e) retry_error(e))
+  }
+  
+  for (i in seq_len(athena_option_env$retry)) {
+    resp <- tryCatch(eval.parent(substitute(expr)), 
+                     error = function(e) retry_error(e))
+    
+    if(inherits(resp, "error")){
+      
+      # stop retry if statement is an invalid request
+      if (grepl("InvalidRequestException", resp[1])) {stop(resp[1], call. = FALSE)}
+      
+      backoff_len <- runif(n=1, min=0, max=(2^i - 1))
+      
+      if(!athena_option_env$retry_quiet) message(resp[1], "Request failed. Retrying in ", round(backoff_len, 1), " seconds...")
+      
+      Sys.sleep(backoff_len)
+    } else {break}
+  }
+  
+  if (inherits(resp, "error")) stop(resp[1])
+  
+  resp
+}
+
+# Create table With parameters
+ctas_sql_with <- function(partition = NULL, s3.location = NULL, file.type = "NULL", compress = TRUE){
+  if(file.type!="NULL" || !is.null(s3.location) || !is.null(partition)){
+    FILE <- switch(file.type,
+                   "csv" = "format = 'TEXTFILE',\nfield_delimiter = ','",
+                   "tsv" = "format = 'TEXTFILE',\nfield_delimiter = '\t'",
+                   "parquet" = "format = 'PARQUET'",
+                   "json" = "format = 'JSON'",
+                   "orc" = "format = 'ORC'",
+                   "")
+    
+    COMPRESSION <- ""
+    if (compress) {
+      if(file.type %in% c("tsv", "csv", "json")) warning("Can only compress parquet or orc files: https://docs.aws.amazon.com/athena/latest/ug/create-table-as.html", call. = FALSE)
+      COMPRESSION <- switch(file.type,
+                            "parquet" = ",\nparquet_compression = 'SNAPPY'",
+                            "orc" = ",\norc_compression = 'SNAPPY'",
+                            "")
+    }
+    
+    LOCATION <- if(!is.null(s3.location)){
+      if(file.type == "NULL") paste0("external_location ='", s3.location, "'")
+      else paste0(",\nexternal_location ='", s3.location, "'")
+    } else ""
+    
+    PARTITION <- if(!is.null(partition)){
+      partition <- paste(partition, collapse = "','")
+      if(is.null(s3.location) && file.type == "NULL") paste0("partitioned_by = ARRAY['",partition,"']")
+      else paste0(",\npartitioned_by = ARRAY['",partition,"']")
+    } else ""
+    
+    paste0("WITH (", FILE, COMPRESSION, LOCATION, PARTITION,")\n")
+  } else ""
+}
