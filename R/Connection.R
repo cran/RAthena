@@ -632,6 +632,8 @@ setMethod(
 
 #' Send query, retrieve results and then clear result set
 #'
+#' @note If the user does not have permission to remove AWS S3 resource from AWS Athena output location, then an AWS warning will be returned.
+#'       It is better use query caching \code{\link{RAthena_options}} so that the warning doesn't repeatedly show.
 #' @name dbGetQuery
 #' @inheritParams DBI::dbGetQuery
 #' @param statistics If set to \code{TRUE} will print out AWS Athena statistics of query.
@@ -824,7 +826,7 @@ setMethod(
       Table <- gsub(".*\\.", "" , name)
     } else {dbms.name <- conn@info$dbms.name
     Table <- name}
-    SQL(dbGetQuery(conn, paste0("SHOW CREATE TABLE ", dbms.name,".",Table))[[1]])
+    SQL(paste0(dbGetQuery(conn, paste0("SHOW CREATE TABLE ", dbms.name,".",Table))[[1]], collapse = "\n"))
   })
 
 #' Simple wrapper to convert Athena backend file types

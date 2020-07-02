@@ -33,6 +33,9 @@ setClass(
 #' 
 #' Frees all resources (local and Athena) associated with result set. It does this by removing query output in AWS S3 Bucket,
 #' stopping query execution if still running and removed the connection resource locally.
+#' 
+#' @note If the user does not have permission to remove AWS S3 resource from AWS Athena output location, then an AWS warning will be returned.
+#'       It is better use query caching \code{\link{RAthena_options}} so that the warning doesn't repeatedly show.
 #' @name dbClearResult
 #' @inheritParams DBI::dbClearResult
 #' @return \code{dbClearResult()} returns \code{TRUE}, invisibly.
@@ -204,6 +207,12 @@ setMethod(
       # replace names with actual names
       Names <- sapply(result_class, function(x) x$Name)
       colnames(dt) <- Names
+      
+      # convert data.table to tibble if using vroom as backend
+      if(inherits(athena_option_env$file_parser, "athena_vroom")) {
+        as_tibble <- pkg_method("as_tibble", "tibble")
+        dt <- as_tibble(dt)}
+      
       return(dt)
     }
     
@@ -223,14 +232,7 @@ setMethod(
     
     if(grepl("\\.csv$",result_info$key)){
       output <- athena_read(athena_option_env$file_parser, File, result_class)
-    } else{
-      file_con <- file(File)
-      output <- suppressWarnings(readLines(file_con))
-      close(file_con)
-      if(any(grepl("create|table", output, ignore.case = T))){
-        output <- data.frame("TABLE_DDL" = paste0(output, collapse = "\n"), stringsAsFactors = FALSE)
-      } else (output <- data.frame(var1 = trimws(output), stringsAsFactors = FALSE))
-    }
+    } else{output <- athena_read_lines(athena_option_env$file_parser, File, result_class)}
     return(output)
   })
 
