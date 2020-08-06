@@ -1,10 +1,10 @@
-638147b8579586fdb3b38dff98b55f9d *DESCRIPTION
+a3904a2f0b7443ea00355eb4a2e84db3 *DESCRIPTION
 c4afaa2ab9feac5091df86cf1758cb78 *LICENSE
 acc4eb1fdbb650ae5dab93e228814e48 *NAMESPACE
-9828a0de4cfc39dd46a8e15702efae05 *NEWS.md
-4a0886e243109b14302e6a15eb635517 *R/Connection.R
+09d4671bac1f27ca2b08271b426c6796 *NEWS.md
+8185becd7b9cb274a485ba385abc703c *R/Connection.R
 698aa16ab834982fc0df90871a0af7a0 *R/DataTypes.R
-47179961646534cfefd6594c8136d312 *R/Driver.R
+8c357e58588b665de82b82423f7e0e12 *R/Driver.R
 242f33e2da18f1928c01164b0e30aa42 *R/File_Parser.R
 72a3cb48a843c61e18effa3348836a9c *R/Options.R
 fb28d83b17ccbb43bc0e0c208f15b470 *R/RAthena.R
@@ -15,10 +15,10 @@ d2f1419e7974ffdd4a0d847df6cda269 *R/dplyr_integration.R
 cbf681bc0d5f7bfc51853c87b1b444de *R/install.R
 c3060267172accf9b71bb3753fa34b08 *R/sql_translate_env.R
 557c443a825a86b1cd3889cbab97b86c *R/table.R
-96e1de713b21c5986ed10a2fceb82fcb *R/util.R
+422ae179d4e8d23e263ac8a2c258c76a *R/util.R
 00ba93d4d26db295e8b63405a9630953 *R/zzz.R
 110054de6767b07a22bb437b586d6e02 *README.md
-f333f4962448301030e8e2c13dd8b77b *build/vignette.rds
+d3249a4972e0cfd6654e1d7990b5a71c *build/vignette.rds
 729c1317a45bb45d9143e650d4eace08 *inst/doc/aws_athena_query_caching.Rmd
 acaf57e68991ef6aadb8ab555eec9f8c *inst/doc/aws_athena_query_caching.html
 466cb35d9d223a6a314c41d717029da7 *inst/doc/aws_s3_backend.R
@@ -28,8 +28,8 @@ acaf57e68991ef6aadb8ab555eec9f8c *inst/doc/aws_athena_query_caching.html
 f0053af9a746e681d26617c6bcbe7206 *inst/doc/changing_backend_file_parser.html
 48b4926187c6ef08d89503fd7d2ce274 *inst/doc/convert_and_save_cost.Rmd
 b11163c497262d0718c4ef8e96a5e5c0 *inst/doc/convert_and_save_cost.html
-eb35152bd0ff94411e285db25ffdb8ee *inst/doc/getting_started.Rmd
-0919ca1fe114f30c11a7bc6aa93526ba *inst/doc/getting_started.html
+6522abe5a101b941f08c11203406a4a3 *inst/doc/getting_started.Rmd
+a81445b7b207bde8ff9ecfa64c81d670 *inst/doc/getting_started.html
 3515ed1ddf32b2501af709442e5f5000 *inst/doc/how_to_retry.Rmd
 cc2cfb9ba0bf37386fa41bf4149d97d6 *inst/doc/how_to_retry.html
 2d72dd7b6dfe3f2616088111e4655556 *inst/icons/athena-logo.png
@@ -46,7 +46,7 @@ ac056b855433427e5e88ccbcd6d2f20e *man/RAthena_options.Rd
 93dab4171c9f4e19aee7e9b448ca6c4e *man/backend_dbplyr.Rd
 8fe0c9d64e86b77d50dde9c4aabce839 *man/dbClearResult.Rd
 f18075816b0dc3048d2ef7af9472ba82 *man/dbColumnInfo.Rd
-aa9d0abda6f367381aff5e1fff563893 *man/dbConnect-AthenaDriver-method.Rd
+3719e567960c008ce6abdd075ef605a5 *man/dbConnect-AthenaDriver-method.Rd
 bbd78c38c38e764ccfe65d65ca8427b3 *man/dbConvertTable.Rd
 e6974f13e4f744914a1ccbfa7b3c8986 *man/dbDataType.Rd
 0be0b8eb1183ce3c5fe818e5958dc96f *man/dbDisconnect.Rd
@@ -89,7 +89,7 @@ abc813de496b6446ded87efda6fb006f *tests/testthat/test-dplyr-compute.R
 50beee3c4b95f9055e3b4b91684bed27 *tests/testthat/test-dplyr-copy_to.R
 38205937f79629840caf2eedcad9cbed *tests/testthat/test-dplyr-sql-trans-env.R
 436cb02b02f6cef76cc80329af1e168d *tests/testthat/test-exist-remove.R
-b184bbab4046943d37894094936a4cb1 *tests/testthat/test-metadata.R
+1741c6bba15552ed00ca4faab101107c *tests/testthat/test-metadata.R
 190b6250aa2d96d61c5c64f1d43b2b1c *tests/testthat/test-retry.R
 276537e27ef5f0f16f7250ce9a5d30d9 *tests/testthat/test-s3-upload-location.R
 7eccb1adb6118802ba803a14e15901e6 *tests/testthat/test-work-groups.R
@@ -98,5 +98,5 @@ b184bbab4046943d37894094936a4cb1 *tests/testthat/test-metadata.R
 9a0f4e39babe91be6da3a75774eefd6f *vignettes/aws_s3_backend.Rmd
 54313efa21d559375689ce77e11eed68 *vignettes/changing_backend_file_parser.Rmd
 48b4926187c6ef08d89503fd7d2ce274 *vignettes/convert_and_save_cost.Rmd
-eb35152bd0ff94411e285db25ffdb8ee *vignettes/getting_started.Rmd
+6522abe5a101b941f08c11203406a4a3 *vignettes/getting_started.Rmd
 3515ed1ddf32b2501af709442e5f5000 *vignettes/how_to_retry.Rmd
