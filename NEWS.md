@@ -1,3 +1,8 @@
+# RAthena 1.10.1
+## Bug Fix
+* Do not abort if a glue::get_tables api call fails (e.g., due to missing permissions to a specific database or an orphaned Lake Formation resource link) when retrieving a list of database tables with dbListTables, dbGetTables or in Rstudio's Connections pane. Thanks to @OssiLehtinen creating solution ([noctua: # 106](https://github.com/DyfanJones/noctua/pull/106))
+* Allowed cache_size to equal 100
+
 # RAthena 1.10.0
 ## New Feature
 * RAthena now supports Keyboard Interrupt and will stop AWS Athena running the query when the query has been interrupted. To keep the functionality of AWS Athena running when `R` has been interrupt a new parameter has been added to `dbConnect`, `keyboard_interrupt`. Example:
@@ -18,7 +23,7 @@ con <- dbConnect(RAthena::athena(),
 * Fixed issue where `RAthena` would return a `data.frame` for utility `SQL` queries regardless of backend file parser. This is due to `AWS Athena` outputting `SQL UTILITY` queries as a text file that required to be read in line by line. Now `RAthena` will return the correct data format based on file parser set in `RAthena_options` for example: `RAthena_options("vroom")` will return `tibbles`.
 
 ## Documentation:
-* Added documentation to highlight behaviour `dbClearResult` when user doesn't have permission to delete AWS S3 objects ([noctua: # 96]*https://github.com/DyfanJones/noctua/issues/96))
+* Added documentation to highlight behaviour `dbClearResult` when user doesn't have permission to delete AWS S3 objects ([noctua: # 96](https://github.com/DyfanJones/noctua/issues/96))
 
 # RAthena 1.9.0
 ## New Feature

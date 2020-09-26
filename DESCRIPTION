@@ -1,7 +1,7 @@
 Package: RAthena
 Type: Package
 Title: Connect to 'AWS Athena' using 'Boto3' ('DBI' Interface)
-Version: 1.10.0
+Version: 1.10.1
 Authors@R: person("Dyfan", "Jones", email="dyfan.r.jones@gmail.com", 
                   role= c("aut", "cre"))
 Description: Designed to be compatible with the R package 'DBI' (Database Interface)
@@ -25,8 +25,8 @@ Collate: 'RAthena.R' 'Driver.R' 'Connection.R' 'DataTypes.R'
         'athena_low_api.R' 'dplyr_integration.R' 'install.R'
         'sql_translate_env.R' 'table.R' 'util.R' 'zzz.R'
 NeedsCompilation: no
-Packaged: 2020-08-06 10:49:26 UTC; lmar763
+Packaged: 2020-09-26 12:47:51 UTC; lmar763
 Author: Dyfan Jones [aut, cre]
 Maintainer: Dyfan Jones <dyfan.r.jones@gmail.com>
 Repository: CRAN
-Date/Publication: 2020-08-06 12:30:10 UTC
+Date/Publication: 2020-09-27 00:40:09 UTC
