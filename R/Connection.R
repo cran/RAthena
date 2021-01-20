@@ -555,6 +555,7 @@ setMethod(
 #' @param confirm Allows for S3 files to be deleted without the prompt check. It is recommend to leave this set to \code{FALSE}
 #'                   to avoid deleting other S3 files when the table's definition points to the root of S3 bucket.
 #' @seealso \code{\link[DBI]{dbRemoveTable}}
+#' @note If you are having difficulty removing AWS S3 files please check if the AWS S3 location following AWS best practises: \href{https://docs.aws.amazon.com/athena/latest/ug/tables-location-format.html}{Table Location in Amazon S3}
 #' @examples
 #' \dontrun{
 #' # Note: 
@@ -608,6 +609,10 @@ setMethod(
                                                Name = Table)$Table$StorageDescriptor$Location),
         error = function(e) py_error(e))
       
+      # Detect if key ends with "/" or if it has ".": https://github.com/DyfanJones/noctua/issues/125
+      if(!grepl("\\.|/$", s3_path$key))
+        s3_path$key <- sprintf("%s/", s3_path$key)
+      
       message(paste0("Info: The S3 objects in prefix will be deleted:\n",
                      paste0("s3://", s3_path$bucket, "/", s3_path$key)))
       
@@ -619,7 +624,7 @@ setMethod(
       }
       
       # Remove objects in prefix of AWS Athena table
-      tryCatch(s3$Bucket(s3_path$bucket)$objects$filter(Prefix = paste0(s3_path$key, "/"))$delete(),
+      tryCatch(s3$Bucket(s3_path$bucket)$objects$filter(Prefix = s3_path$key)$delete(),
                error = function(e) py_error(e))
     }
     
@@ -728,6 +733,8 @@ setMethod(
 #' 
 #' This method returns all partitions from Athena table.
 #' @inheritParams DBI::dbExistsTable
+#' @param .format re-formats AWS Athena partitions format. So that each column represents a partition
+#'         from the AWS Athena table. Default set to \code{FALSE} to prevent breaking previous package behaviour.
 #' @return data.frame that returns all partitions in table, if no partitions in Athena table then
 #'         function will return error from Athena.
 #' @name dbGetPartition
@@ -760,22 +767,38 @@ NULL
 #' @rdname dbGetPartition
 #' @export
 setGeneric("dbGetPartition",
-           def = function(conn, name, ...) standardGeneric("dbGetPartition"),
+           def = function(conn, name, ..., .format = FALSE) standardGeneric("dbGetPartition"),
            valueClass = "data.frame")
 
 #' @rdname dbGetPartition
 #' @export
 setMethod(
   "dbGetPartition", "AthenaConnection",
-  function(conn, name, ...) {
+  function(conn, name, ..., .format = FALSE) {
     if (!dbIsValid(conn)) {stop("Connection already closed.", call. = FALSE)}
+    stopifnot(is.logical(.format))
     
     if(grepl("\\.", name)){
       dbms.name <- gsub("\\..*", "" , name)
       Table <- gsub(".*\\.", "" , name)
     } else {dbms.name <- conn@info$dbms.name
     Table <- name}
-    dbGetQuery(conn, paste0("SHOW PARTITIONS ", dbms.name,".",Table))
+    dt = dbGetQuery(conn, paste0("SHOW PARTITIONS ", dbms.name,".",Table))
+    
+    if(.format){
+      # ensure returning format is data.table
+      dt = as.data.table(dt)
+      dt = dt[, tstrsplit(dt[[1]], split =  "/")]
+      partitions = sapply(names(dt), function(x) strsplit(dt[[x]][1], split = "=")[[1]][1])
+      for (col in names(dt)) set(dt, j=col, value=tstrsplit(dt[[col]], split =  "=")[2])
+      setnames(dt, old = names(dt), new = partitions)
+      
+      # convert data.table to tibble if using vroom as backend
+      if(inherits(athena_option_env$file_parser, "athena_vroom")) {
+        as_tibble <- pkg_method("as_tibble", "tibble")
+        dt <- as_tibble(dt)}
+    }
+    return(dt)
   })
 
 #' Show Athena table's DDL
