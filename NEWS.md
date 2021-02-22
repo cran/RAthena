@@ -1,7 +1,122 @@
+# RAthena 2.0.0
+## API Change
+* `AthenaConnection` class: `ptr` and `info` slots changed from `list` to `environment` with in `AthenaConnect` class. Allows class to be updated by reference. Simplifies notation when viewing class from RStudio environment tab.
+* `AthenaResult` class: `info` slot changed from `list` to `environment`. Allows class to be updated by reference. 
+
+By utilising environments for `AthenaConnection` and `AthenaResult`, all `AthenaResult` classes created from `AthenaConnection` will point to the same `ptr` and `info` environments for it's connection. Previously `ptr` and `info` would make a copy. This means if it was modified it would not affect the child or parent class for example:
+
+```r
+# Old Method
+library(DBI)
+con <- dbConnect(RAthena::athena(),
+                 rstudio_conn_tab = F)
+
+res <- dbExecute(con, "select 'helloworld'")
+
+# modifying parent class to influence child
+con@info$made_up <- "helloworld"
+
+# nothing happened
+res@connection@info$made_up
+# > NULL
+
+# modifying child class to influence parent
+res@connection@info$made_up <- "oh no!"
+
+# nothing happened
+con@info$made_up
+# > "helloworld"
+
+# New Method
+library(DBI)
+con <- dbConnect(RAthena::athena(),
+                 rstudio_conn_tab = F)
+
+res <- dbExecute(con, "select 'helloworld'")
+
+# modifying parent class to influence child
+con@info$made_up <- "helloworld"
+
+# picked up change
+res@connection@info$made_up
+# > "helloworld"
+
+# modifying child class to influence parent
+res@connection@info$made_up <- "oh no!"
+
+# picked up change
+con@info$made_up
+# > "oh no!"
+```
+
+## New Feature
+* Added support to `AWS Athena` data types `[array, row, map, json, binary, ipaddress]` ([noctua: # 135](https://github.com/DyfanJones/noctua/issues/135)). Conversion types can be changed through `dbConnect` and `RAthena_options`.
+```r
+library(DBI)
+library(RAthena)
+
+# default conversion methods
+con <- dbConnect(RAthena::athena())
+
+# change json conversion method
+RAthena_options(json = "character")
+RAthena:::athena_option_env$json
+# [1] "character"
+
+# change json conversion to custom method
+RAthena_options(json = jsonify::from_json)
+
+RAthena:::athena_option_env$json
+# function (json, simplify = TRUE, fill_na = FALSE, buffer_size = 1024) 
+# {
+#   json_to_r(json, simplify, fill_na, buffer_size)
+# }
+# <bytecode: 0x7f823b9f6830>
+#   <environment: namespace:jsonify>
+
+# change bigint conversion without affecting custom json conversion methods
+RAthena_options(bigint = "numeric")
+
+RAthena:::athena_option_env$json
+# function (json, simplify = TRUE, fill_na = FALSE, buffer_size = 1024) 
+# {
+#   json_to_r(json, simplify, fill_na, buffer_size)
+# }
+# <bytecode: 0x7f823b9f6830>
+#   <environment: namespace:jsonify>
+RAthena:::athena_option_env$bigint
+# [1] "numeric"
+
+# change binary conversion without affect, bigint or json methods
+RAthena_options(binary = "character")
+
+RAthena:::athena_option_env$json
+# function (json, simplify = TRUE, fill_na = FALSE, buffer_size = 1024) 
+# {
+#   json_to_r(json, simplify, fill_na, buffer_size)
+# }
+# <bytecode: 0x7f823b9f6830>
+#   <environment: namespace:jsonify>
+RAthena:::athena_option_env$bigint
+# [1] "numeric"
+RAthena:::athena_option_env$binary
+# [1] "character"
+
+# no conversion for json objects
+con2 <- dbConnect(RAthena::athena(), json = "character")
+# use custom json parser
+con <- dbConnect(RAthena::athena(), json = jsonify::from_json)
+```
+* Allow users to turn off RStudio Connection Tab when working in RStudio ([noctua: # 136](https://github.com/DyfanJones/noctua/issues/136)). This can be done through parameter `rstudio_conn_tab` within `dbConnect`.
+
+## Bug Fix:
+* `AWS Athena` uses `float` data type for the DDL only, `RAthena` was wrongly parsing `float` data type back to R. Instead `AWS Athena` uses data type `real` in SQL functions like `select cast` https://docs.aws.amazon.com/athena/latest/ug/data-types.html. `RAthena` now correctly parses `real` to R's data type `double` ([noctua: # 133](https://github.com/DyfanJones/noctua/issues/133))
+* Iterate through each token `AWS` returns to get all results from `AWS Glue` catalogue ([noctua: # 137](https://github.com/DyfanJones/noctua/issues/137))
+
 # RAthena 1.12.0
 ## New Feature
 * Added optional formatting to `dbGetPartition`. This simply tidies up the default AWS Athena partition format.
-```
+```r
 library(DBI)
 library(RAthena)
 
@@ -28,8 +143,8 @@ con <- dbConnect(RAthena::athena(), bigint = "numeric")
 When switching between the different file parsers the `bigint` to be represented according to the file parser i.e. `data.table`: "integer64" -> `vroom`: "I".
 
 ## Bug Fix:
-* `dbRemoveTable`: Check if key has "." or ends with "/" before adding "/" to the end ([# 125](https://github.com/DyfanJones/noctua/issues/125))
-* Added uuid minimum version to fix issue ([# 128](https://github.com/DyfanJones/noctua/issues/128))
+* `dbRemoveTable`: Check if key has "." or ends with "/" before adding "/" to the end ([noctua: # 125](https://github.com/DyfanJones/noctua/issues/125))
+* Added uuid minimum version to fix issue ([noctua: # 128](https://github.com/DyfanJones/noctua/issues/128))
 
 ## Documentation:
 * Added note to dbRemoveTable doc string around aws athena table Location in Amazon S3.

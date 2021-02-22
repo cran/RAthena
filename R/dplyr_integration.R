@@ -70,14 +70,8 @@ db_compute.AthenaConnection <- function(con,
   in_schema <- pkg_method("in_schema", "dbplyr")
   
   table <- db_save_query(con, sql, table, ...)
-  if (grepl("\\.", table)) {
-    schema <- gsub("\\..*", "" , table)
-    table <- gsub(".*\\.", "" , table)
-  } else {
-    schema <- con@info$dbms.name
-    table <- table}
-  
-  in_schema(schema, table)
+  ll <- db_detect(con, table)
+  in_schema(ll[["dbms.name"]], ll[["table"]])
 }
 
 #' Athena S3 implementation of dbplyr backend functions
@@ -88,8 +82,8 @@ db_compute.AthenaConnection <- function(con,
 #' @param con A \code{\link{dbConnect}} object, as returned by \code{dbConnect()}
 #' @param sql SQL code to be sent to AWS Athena
 #' @param x R object to be transformed into athena equivalent 
-#' @param name Table name if left default noctua will use default from 'dplyr''s \code{compute} function.
-#' @param file_type What file type to store data.frame on s3, noctua currently supports ["NULL","csv", "tsv", "parquet", "json", "orc"]. 
+#' @param name Table name if left default RAthena will use default from 'dplyr''s \code{compute} function.
+#' @param file_type What file type to store data.frame on s3, RAthena currently supports ["NULL","csv", "tsv", "parquet", "json", "orc"]. 
 #'                  \code{"NULL"} will let Athena set the file_type for you.
 #' @param s3_location s3 bucket to store Athena table, must be set as a s3 uri for example ("s3://mybucket/data/")
 #' @param partition Partition Athena table, requires to be a partitioned variable from previous table.
@@ -116,7 +110,7 @@ db_save_query.AthenaConnection <- function(con, sql, name ,
                    sql, ";"))
   res <- dbExecute(con, tt_sql)
   dbClearResult(res)
-  name
+  return(name)
 }
 
 #' S3 implementation of \code{db_copy_to} for Athena
@@ -223,10 +217,8 @@ db_query_fields.AthenaConnection <- function(con, sql, ...) {
     } else {
       schema_parts <- c(con@info$dbms.name, gsub('"', "", sql))}
     
-    glue <- con@ptr$client("glue")
-    
     tryCatch(
-      output <- glue$get_table(DatabaseName = schema_parts[1],
+      output <- con@ptr$glue$get_table(DatabaseName = schema_parts[1],
                                Name = schema_parts[2])$Table,
       error = function(e) py_error(e))
     

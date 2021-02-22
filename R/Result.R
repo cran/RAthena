@@ -6,15 +6,18 @@ AthenaResult <- function(conn,
                          s3_staging_dir = NULL){
   
   stopifnot(is.character(statement))
-  Athena <- client_athena(conn)
   Request <- request(conn, statement)
   
-  response <- list(QueryExecutionId = NULL)
-  if (athena_option_env$cache_size > 0) response <- list(QueryExecutionId = check_cache(statement, conn@info$work_group))
+  response <- new.env(parent = emptyenv())
+  if (athena_option_env$cache_size > 0) 
+    response[["QueryExecutionId"]] = check_cache(statement, conn@info$work_group)
   if (is.null(response$QueryExecutionId)) {
-    retry_api_call(response <- list(QueryExecutionId = do.call(Athena$start_query_execution, Request, quote = T)$QueryExecutionId))}
+    retry_api_call(
+      response[["QueryExecutionId"]] <- do.call(
+        conn@ptr$Athena$start_query_execution,
+        Request, quote = T)$QueryExecutionId)}
   on.exit(if(!is.null(conn@info$expiration)) time_check(conn@info$expiration))
-  new("AthenaResult", connection = conn, athena = Athena, info = c(response, list(NextToken = NULL)))
+  new("AthenaResult", connection = conn, info = response)
 }
 
 #' @rdname AthenaConnection
@@ -24,8 +27,7 @@ setClass(
   contains = "DBIResult",
   slots = list(
     connection = "AthenaConnection",
-    athena = "ANY",
-    info = "list"
+    info = "environment"
   )
 )
 
@@ -69,41 +71,45 @@ setMethod(
       warning("Result already cleared", call. = FALSE)
     } else {
       
-      # checks status of query
-      retry_api_call(query_execution <- res@athena$get_query_execution(QueryExecutionId = res@info$QueryExecutionId))
-      
       # stops resource if query is still running
-      if (!(query_execution$QueryExecution$Status$State %in% c("SUCCEEDED", "FAILED", "CANCELLED"))){
-        retry_api_call(res@athena$stop_query_execution(QueryExecutionId = res@info$QueryExecutionId))}
+      retry_api_call(res@connection@ptr$Athena$stop_query_execution(
+        QueryExecutionId = res@info[["QueryExecutionId"]]))
       
-      # clear s3 athena output
-      tryCatch(s3 <- res@connection@ptr$resource("s3"),
-               error = function(e) py_error(e))
-      
-      # split s3_uri
-      result_info <- split_s3_uri(query_execution$QueryExecution$ResultConfiguration$OutputLocation)
-      
-      tryCatch(bucket <- s3$Bucket(result_info$bucket),
-               error = function(e) py_error(e))
-      
-      # remove class pointers
-      eval.parent(substitute(res@connection@ptr <- NULL))
-      eval.parent(substitute(res@athena <- NULL))
+      if(is.null(res@info[["Status"]])){
+        # checks status of query
+        retry_api_call(query_execution <- res@connection@ptr$Athena$get_query_execution(
+          QueryExecutionId = res@info$QueryExecutionId))
+        res@info[["OutputLocation"]] <- 
+          query_execution[["QueryExecution"]][["ResultConfiguration"]][["OutputLocation"]]
+        res@info[["StatementType"]] <- 
+          query_execution[["QueryExecution"]][["StatementType"]]
+      }
       
       # for caching s3 data is still required
       if (athena_option_env$cache_size == 0){
+        result_info <- split_s3_uri(res@info[["OutputLocation"]])
+        
         # Output Python error as warning if s3 resource can't be dropped
-        tryCatch(s3$Object(result_info$bucket, paste0(result_info$key, ".metadata"))$delete(),
+        tryCatch(res@connection@ptr$S3$delete_object(
+          Bucket = result_info[["bucket"]], Key = paste0(result_info[["key"]], ".metadata")),
                  error = function(e) py_warning(e))
-        tryCatch(s3$Object(result_info$bucket, result_info$key)$delete(),
+        tryCatch(res@connection@ptr$S3$delete_object(
+          Bucket = result_info[["bucket"]], Key = result_info[["key"]]),
                  error = function(e) cat(""))
         # remove manifest csv created with CTAS statements 
-        if (query_execution$QueryExecution$StatementType == "DDL")
-          tryCatch(s3$Object(result_info$bucket, paste0(result_info$key, "-manifest.csv"))$delete(),
-                   error = function(e) cat(""))}
+        if (res@info[["StatementType"]] == "DDL")
+          tryCatch({
+            res@connection@ptr$S3$delete_object(
+              Bucket = result_info[["bucket"]],
+              Key = paste0(result_info[["key"]], "-manifest.csv"))},
+            error = function(e) cat(""))
+        }
+      
+      # remove query information
+      rm(list = ls(all.names = TRUE, envir = res@info), envir = res@info)
     }
     invisible(TRUE)
-  })
+})
 
 #' Fetch records from previously executed query
 #' 
@@ -141,27 +147,30 @@ NULL
 setMethod(
   "dbFetch", "AthenaResult",
   function(res, n = -1, ...){
-    if (!dbIsValid(res)) {stop("Result already cleared", call. = FALSE)}
-    # check status of query
-    result <- poll(res)
+    con_error_msg(res, msg = "Result already cleared.")
     
-    # cache query metadata if caching is enabled
-    if (athena_option_env$cache_size > 0) cache_query(result)
-    
-    result_info <- split_s3_uri(result$QueryExecution$ResultConfiguration$OutputLocation)
+    # check status of query, skip poll if status found
+    if(is.null(res@info[["Status"]]))
+      poll(res)
     
     # if query failed stop
-    if(result$QueryExecution$Status$State == "FAILED") {
-      stop(result$QueryExecution$Status$StateChangeReason, call. = FALSE)
-    }
+    if(res@info[["Status"]] == "FAILED")
+      stop(res@info[["StateChangeReason"]], call. = FALSE)
+    
+    # cache query metadata if caching is enabled
+    if (athena_option_env[["cache_size"]] > 0)
+      cache_query(res)
+    
+    result_info <- split_s3_uri(res@info[["OutputLocation"]])
     
     # return metadata of athena data types
-    retry_api_call(result_class <- res@athena$get_query_results(QueryExecutionId = res@info$QueryExecutionId,
-                                                                MaxResults = as.integer(1))$ResultSet$ResultSetMetadata$ColumnInfo)
+    retry_api_call(result_class <- res@connection@ptr$Athena$get_query_results(
+      QueryExecutionId = res@info$QueryExecutionId,
+      MaxResults = as.integer(1))[["ResultSet"]][["ResultSetMetadata"]][["ColumnInfo"]])
     
     if(n >= 0 && n !=Inf){
       # assign token from AthenaResult class
-      token <- res@info$NextToken
+      token <- res@info[["NextToken"]]
       
       if(length(token) == 0) n <- as.integer(n + 1)
       chunk = as.integer(n)
@@ -177,11 +186,21 @@ setMethod(
         if(i == max(iterate)) chunk <- as.integer(n - (i-1) * chunk)
         
         # get chunk with retry api call if call fails
-        if(length(token) == 0) {retry_api_call(result <- res@athena$get_query_results(QueryExecutionId = res@info$QueryExecutionId, MaxResults = chunk))
-          } else {retry_api_call(result <- res@athena$get_query_results(QueryExecutionId = res@info$QueryExecutionId, NextToken = token, MaxResults = chunk))}
+        if(length(token) == 0) {
+          retry_api_call(result <- res@connection@ptr$Athena$get_query_results(
+            QueryExecutionId = res@info[["QueryExecutionId"]],
+            MaxResults = chunk))
+        } else {
+            retry_api_call(result <- res@athena$get_query_results(
+              QueryExecutionId = res@info[["QueryExecutionId"]],
+              NextToken = token, 
+              MaxResults = chunk))
+        }
         
         # process returned list
-        output <- lapply(result$ResultSet$Rows, function(x) (sapply(x$Data, function(x) if(length(x) == 0 ) NA else x)))
+        output <- lapply(
+          result[["ResultSet"]][["Rows"]],
+          function(x) (sapply(x$Data, function(x) if(length(x) == 0 ) NA else x)))
         suppressWarnings(staging_dt <- rbindlist(output, use.names = FALSE))
         
         # remove colnames from first row
@@ -196,20 +215,25 @@ setMethod(
         dt_list[[i]] <- staging_dt
         
         # if token hasn't changed or if no more tokens are available then break loop
-        if ((length(token) != 0 && token == result$NextToken) || length(result$NextToken) == 0) {break} else {token <- result$NextToken}
+        if ((length(token) != 0 &&
+             token == result[["NextToken"]]) ||
+            length(result[["NextToken"]]) == 0) {
+          break
+        } else {
+            token <- result[["NextToken"]]}
       }
       # combined all lists together
       dt <- rbindlist(dt_list, use.names = FALSE)
       
-      # Update Token in s4 class
-      eval.parent(substitute(res@info$NextToken <- result$NextToken))
+      # Update last token in s4 class
+      res@info[["NextToken"]] <- result[["NextToken"]]
       
       # replace names with actual names
       Names <- sapply(result_class, function(x) x$Name)
       colnames(dt) <- Names
       
       # convert data.table to tibble if using vroom as backend
-      if(inherits(athena_option_env$file_parser, "athena_vroom")) {
+      if(inherits(athena_option_env[["file_parser"]], "athena_vroom")) {
         as_tibble <- pkg_method("as_tibble", "tibble")
         dt <- as_tibble(dt)}
       
@@ -217,24 +241,29 @@ setMethod(
     }
     
     # Added data scan information when returning data from athena
-    message("Info: (Data scanned: ",data_scanned(result$QueryExecution$Statistics$DataScannedInBytes),")")
+    message("Info: (Data scanned: ", data_scanned(
+      res@info[["Statistics"]][["DataScannedInBytes"]]),")")
     
     #create temp file
     File <- tempfile()
     on.exit(unlink(File))
     
-    # connect to s3 and create a bucket object
-    tryCatch({s3 <- res@connection@ptr$resource("s3")},
-             error = function(e) py_error(e))
-    
     # download athena output
-    retry_api_call(s3$Bucket(result_info$bucket)$download_file(result_info$key, File))
+    retry_api_call(res@connection@ptr$S3$download_file(
+      result_info[["bucket"]],
+      result_info[["key"]],
+      File))
     
-    if(grepl("\\.csv$",result_info$key)){
-      output <- athena_read(athena_option_env$file_parser, File, result_class)
-    } else{output <- athena_read_lines(athena_option_env$file_parser, File, result_class)}
+    if(grepl("\\.csv$",result_info[["key"]])){
+      output <- athena_read(
+        athena_option_env[["file_parser"]], File, result_class)
+    } else{
+      output <- athena_read_lines(
+        athena_option_env[["file_parser"]], File, result_class)
+    }
+    
     return(output)
-  })
+})
 
 #' Completion status
 #' 
@@ -271,12 +300,22 @@ NULL
 setMethod(
   "dbHasCompleted", "AthenaResult",
   function(res, ...) {
-    if (!dbIsValid(res)) {stop("Result already cleared", call. = FALSE)}
-    retry_api_call(query_execution <- res@athena$get_query_execution(QueryExecutionId = res@info$QueryExecutionId))
+    con_error_msg(res, msg = "Result already cleared.")
     
-    if(query_execution$QueryExecution$Status$State %in% c("SUCCEEDED", "FAILED", "CANCELLED")) TRUE
-    else if (query_execution$QueryExecution$Status$State == "RUNNING") FALSE
-  })
+    output <- TRUE
+    # if status has already return then output TRUE
+    if(!is.null(res@info[["Status"]]))
+      return(output)
+    
+    # get status of query
+    retry_api_call(query_execution <- res@connection@ptr$Athena$get_query_execution(
+      QueryExecutionId = res@info[["QueryExecutionId"]]))
+    
+    if (query_execution[["QueryExecution"]][["Status"]][["State"]] %in% c("RUNNING", "QUEUED"))
+      output <- FALSE
+    
+    return(output)
+})
 
 #' @rdname dbIsValid
 #' @export
@@ -284,8 +323,7 @@ setMethod(
   "dbIsValid", "AthenaResult",
   function(dbObj, ...){
     resource_active(dbObj)
-  }
-)
+})
 
 #' @rdname dbGetInfo
 #' @inheritParams DBI::dbGetInfo
@@ -293,11 +331,10 @@ setMethod(
 setMethod(
   "dbGetInfo", "AthenaResult",
   function(dbObj, ...) {
-    if (!dbIsValid(dbObj)) {stop("Result already cleared", call. = FALSE)}
-    info <- dbObj@info
-    info
-  })
-
+    con_error_msg(dbObj, msg = "Result already cleared.")
+    info <- as.list(dbObj@info)
+    return(info)
+})
 
 #' Information about result types
 #' 
@@ -334,20 +371,27 @@ NULL
 setMethod(
   "dbColumnInfo", "AthenaResult",
   function(res, ...){
-    if (!dbIsValid(res)) {stop("Result already cleared", call. = FALSE)}
-    result <- poll(res)
-    if(result$QueryExecution$Status$State == "FAILED") {
-      stop(result$QueryExecution$Status$StateChangeReason, call. = FALSE)
-    }
+    con_error_msg(res, msg = "Result already cleared.")
     
-    retry_api_call(result <- res@athena$get_query_results(QueryExecutionId = res@info$QueryExecutionId, MaxResults = as.integer(1)))
+    # check status of query, skip poll if status found
+    if(is.null(res@info[["Status"]]))
+      poll(res)
     
-    Name <- sapply(result$ResultSet$ResultSetMetadata$ColumnInfo, function(x) x$Name)
-    Type <- sapply(result$ResultSet$ResultSetMetadata$ColumnInfo, function(x) x$Type)
+    # if query failed stop
+    if(res@info[["Status"]] == "FAILED")
+      stop(res@info[["StateChangeReason"]], call. = FALSE)
+    
+    retry_api_call(result <- res@connection@ptr$Athena$get_query_results(
+      QueryExecutionId = res@info[["QueryExecutionId"]],
+      MaxResults = as.integer(1)))
+    
+    Name <- vapply(result[["ResultSet"]][["ResultSetMetadata"]][["ColumnInfo"]],
+                   function(x) x$Name, FUN.VALUE = character(1))
+    Type <- vapply(result[["ResultSet"]][["ResultSetMetadata"]][["ColumnInfo"]], 
+                   function(x) x$Type, FUN.VALUE = character(1))
     data.frame(field_name = Name,
                type = Type, stringsAsFactors = F)
-  }
-)
+})
 
 #' Show AWS Athena Statistics
 #' 
@@ -384,16 +428,18 @@ setGeneric("dbStatistics",
 
 #' @rdname dbStatistics
 #'@export
-setMethod("dbStatistics", "AthenaResult",
-          function(res, ...){
-            if (!dbIsValid(res)) {stop("Result already cleared", call. = FALSE)}
-            # check status of query
-            result <- poll(res)
-            
-            # if query failed stop
-            if(result$QueryExecution$Status$State == "FAILED") {
-              stop(result$QueryExecution$Status$StateChangeReason, call. = FALSE)
-            }
-            
-            result$QueryExecution$Statistics
-          })
+setMethod(
+  "dbStatistics", "AthenaResult",
+  function(res, ...){
+    con_error_msg(res, msg = "Result already cleared.")
+
+    # check status of query, skip poll if status found
+    if(is.null(res@info[["Status"]]))
+      poll(res)
+    
+    # if query failed stop
+    if(res@info[["Status"]] == "FAILED")
+      stop(res@info[["StateChangeReason"]], call. = FALSE)
+    
+    return(res@info[["Statistics"]])
+})
