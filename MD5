@@ -1,14 +1,14 @@
-3a9f725d99f2a5a551f619f837fc34ee *DESCRIPTION
+d07515aa45b49e6e7008215df7623cf5 *DESCRIPTION
 c4afaa2ab9feac5091df86cf1758cb78 *LICENSE
-acc4eb1fdbb650ae5dab93e228814e48 *NAMESPACE
-70bf8feae68d0a3aa0736d85d5ae501b *NEWS.md
-e3b6e44101ffedd736dd9605605b6795 *R/Connection.R
+e2fde785f896062c0f2c1f507e383609 *NAMESPACE
+ce8fc5c2bce153e65267b8304e35e7c7 *NEWS.md
+e298d54b77cb5aea336414942db1bbfc *R/Connection.R
 ea1b7bdef5dd40e7a10d0cbc7ba2e795 *R/DataTypes.R
 26b9d797c372443668d222c74e309a60 *R/Driver.R
 ccb9459bef109fee112956727280e967 *R/File_Parser.R
 56d2c9c7f4da8777d06fe9c561d0d4c9 *R/Options.R
 fb28d83b17ccbb43bc0e0c208f15b470 *R/RAthena.R
-a151f067993c4fe72ad0d1ce640ca1eb *R/Result.R
+5f15f8bc0e7a0c76d07d2fe43912e1dc *R/Result.R
 4697dcd8b53535d7d5362dc26f390442 *R/View.R
 6362dad51de64dd33abf4b58a00aa9b1 *R/athena_low_api.R
 bfd7e8ea69d10515a7abfd596f20a89c *R/column_parser.R
@@ -16,7 +16,7 @@ bfd7e8ea69d10515a7abfd596f20a89c *R/column_parser.R
 ee13325b9566ab9965c2e56bd30357bd *R/install.R
 c3060267172accf9b71bb3753fa34b08 *R/sql_translate_env.R
 c56f362393bbc7ae2400a97353152a70 *R/table.R
-1257fca9b6ae33c6738eb84bd277b8de *R/util.R
+e59ed72936aff17eac28799b2d28bbd3 *R/util.R
 00ba93d4d26db295e8b63405a9630953 *R/zzz.R
 110054de6767b07a22bb437b586d6e02 *README.md
 d9bb9e434f0cfae5e35dfd0b9a3262bc *build/vignette.rds
@@ -56,6 +56,7 @@ ff9f14d67ecd475d938b9c3ca5ab903d *man/dbExistsTable.Rd
 d671911b5f0834559e2e6a46c75a3cd2 *man/dbGetInfo.Rd
 f45649900ce6f57f211a08037433ed62 *man/dbGetPartition.Rd
 c6e719d33f94462b8cf7e7067d7b7cce *man/dbGetQuery.Rd
+4d44d454104bc09f57699f973b4ad3e4 *man/dbGetStatement.Rd
 33db2fb54a947b284da71b80757a64ab *man/dbGetTables.Rd
 5871fd3ea9cdebc4d99e1133cfab4e6b *man/dbHasCompleted.Rd
 69acda26f70356cd934782851e608a2b *man/dbIsValid.Rd
@@ -92,7 +93,8 @@ f97bd636ce4014d3922c70e8a07f4d79 *tests/testthat/test-dplyr-copy_to.R
 b0392e7c27c811e0345e1045bd188a0b *tests/testthat/test-dplyr-sql-trans-env.R
 6616f30d57efc7ac04f208fd5d48b014 *tests/testthat/test-exist-remove.R
 c90b3de0fcbd64cd4e1cf49626b14ce7 *tests/testthat/test-file-parser.R
-62389107ef6b353fe1afe7eb60a8dd07 *tests/testthat/test-metadata.R
+8d0ab0b0cfb9648794b50a6254073dad *tests/testthat/test-keyboard-interrupt.R
+6a27ed19a312fc78f86ebfe35314465f *tests/testthat/test-metadata.R
 c659a89b268dba38a3ac62ed2083eff9 *tests/testthat/test-retry.R
 caa6d71d9f2eeafffb76ae3d9de645b3 *tests/testthat/test-s3-upload-location.R
 0ca897042f97f73bdda224dea6892a53 *tests/testthat/test-upload-file-parameter.R
