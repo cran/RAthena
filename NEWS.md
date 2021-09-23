@@ -1,12 +1,62 @@
+# RAthena 2.2.0
+## Bug Fix:
+* `sql_translate_env` correctly translates R functions `quantile` and `median` to `AWS Athena` equivalents ([noctua # 153](https://github.com/DyfanJones/noctua/issues/153)). Thanks to @ellmanj for spotting issue.
+
+## Feature:
+* Support `AWS Athena` `timestamp with time zone` data type.
+* Properly support data type `list` when converting data to `AWS Athena` `SQL` format.
+
+```r
+library(data.table)
+library(DBI)
+
+x = 5
+
+dt = data.table(
+  var1 = sample(LETTERS, size = x, T),
+  var2 = rep(list(list("var3"= 1:3, "var4" = list("var5"= letters[1:5]))), x)
+)
+
+con <- dbConnect(RAthena::athena())
+
+#> Version: 2.2.0
+
+sqlData(con, dt)
+
+# Registered S3 method overwritten by 'jsonify':
+#   method     from    
+#   print.json jsonlite
+# Info: Special characters "\t" has been converted to " " to help with Athena reading file format tsv
+#    var1                                                   var2
+# 1:    1 {"var3":[1,2,3],"var4":{"var5":["a","b","c","d","e"]}}
+# 2:    2 {"var3":[1,2,3],"var4":{"var5":["a","b","c","d","e"]}}
+# 3:    3 {"var3":[1,2,3],"var4":{"var5":["a","b","c","d","e"]}}
+# 4:    4 {"var3":[1,2,3],"var4":{"var5":["a","b","c","d","e"]}}
+# 5:    5 {"var3":[1,2,3],"var4":{"var5":["a","b","c","d","e"]}}
+
+#> Version: 2.1.0
+
+sqlData(con, dt)
+
+# Info: Special characters "\t" has been converted to " " to help with Athena reading file format tsv
+#    var1                                        var2
+# 1:    1 1:3|list(var5 = c("a", "b", "c", "d", "e"))
+# 2:    2 1:3|list(var5 = c("a", "b", "c", "d", "e"))
+# 3:    3 1:3|list(var5 = c("a", "b", "c", "d", "e"))
+# 4:    4 1:3|list(var5 = c("a", "b", "c", "d", "e"))
+# 5:    5 1:3|list(var5 = c("a", "b", "c", "d", "e"))
+```
+
+v-2.2.0 now converts lists into json lines format so that AWS Athena can parse with `sql` `array`/`mapping`/`json` functions. Small down side a s3 method conflict occurs when `jsonify` is called to convert lists into json lines. `jsonify` was choose in favor to `jsonlite` due to the performance improvements ([noctua # 156](https://github.com/DyfanJones/noctua/issues/156)).
+
 # RAthena 2.1.0
 ## Bug Fix:
 * `dbIsValid` wrongly stated connection is valid for result class when connection class was disconnected.
-* `sql_translate_env.paste` broke with latest version of `dbplyr`. New method is compatible with `dbplyr>=1.4.3` [noctua # 149](https://github.com/DyfanJones/noctua/issues/149).
+* `sql_translate_env.paste` broke with latest version of `dbplyr`. New method is compatible with `dbplyr>=1.4.3` ([noctua # 149](https://github.com/DyfanJones/noctua/issues/149)).
 
 ## Feature:
 * `sql_translate_env`: add support for `stringr`/`lubridate` style functions, similar to [Postgres backend](https://github.com/tidyverse/dbplyr/blob/master/R/backend-postgres.R).
-* `write_bin` now doesn't chunk writeBin if R version is greater than 4.0.0 https://github.com/HenrikBengtsson/Wishlist-for-R/issues/97
-* `dbConnect` add `timezone` parameter so that time zone between `R` and `AWS Athena` is consistent [noctua # 149](https://github.com/DyfanJones/noctua/issues/149).
+* `dbConnect` add `timezone` parameter so that time zone between `R` and `AWS Athena` is consistent ([noctua # 149](https://github.com/DyfanJones/noctua/issues/149)).
 
 # RAthena 2.0.1
 ## Bug Fix:
