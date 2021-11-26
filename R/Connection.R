@@ -1,4 +1,5 @@
 #' @include Driver.R
+#' @include dplyr_integration.R
 NULL
 
 #' Athena Connection Methods
@@ -219,8 +220,8 @@ NULL
 setMethod(
   "dbSendQuery", c("AthenaConnection", "character"),
   function(conn,
-           statement = NULL,
-           unload = FALSE,
+           statement,
+           unload = athena_unload(),
            ...){
     con_error_msg(conn, msg = "Connection already closed.")
     stopifnot(is.logical(unload))
@@ -237,8 +238,8 @@ setMethod(
 setMethod(
   "dbSendStatement", c("AthenaConnection", "character"),
   function(conn,
-           statement = NULL,
-           unload = FALSE,
+           statement,
+           unload = athena_unload(),
            ...){
     con_error_msg(conn, msg = "Connection already closed.")
     stopifnot(is.logical(unload))
@@ -255,8 +256,8 @@ setMethod(
 setMethod(
   "dbExecute", c("AthenaConnection", "character"),
   function(conn,
-           statement = NULL,
-           unload = FALSE,
+           statement,
+           unload = athena_unload(),
            ...){
     con_error_msg(conn, msg = "Connection already closed.")
     stopifnot(is.logical(unload))
@@ -339,20 +340,58 @@ setMethod("dbDataType", c("AthenaConnection", "data.frame"), function(dbObj, obj
 #' @docType methods
 NULL
 
+# import DBI quote_string method
+dbi_quote = methods::getMethod("dbQuoteString", c("DBIConnection", "character"), asNamespace("DBI"))
+
+detect_date <- function(x, try_format = c("%Y-%m-%d", "%Y/%m/%d")){
+  return(all_dates = all(try(as.Date(x, tryFormats = try_format), silent=T) == x) & all(nchar(x) == 10))
+}
+
+detect_date_time <- function(x){
+  timestamp_fmt = c("%Y-%m-%d %H:%M:%OS", "%Y/%m/%d %H:%M:%OS", "%Y-%m-%d %H:%M", "%Y/%m/%d %H:%M")
+  return(all(try(as.POSIXct(x, tryFormats = timestamp_fmt), silent=T) == x))
+}
+
 #' @rdname dbQuote
 #' @export
 setMethod(
   "dbQuoteString", c("AthenaConnection", "character"),
   function(conn, x, ...) {
-    # Optional
-    getMethod("dbQuoteString", c("DBIConnection", "character"), asNamespace("DBI"))(conn, x, ...)
+    if(identical(dbplyr_env$major, 2L)){
+      all_ts <- detect_date_time(x)
+      all_dates <- detect_date(x)
+      if(all_dates & !is.na(all_dates)) {
+        return(paste0('date ', dbi_quote(conn, strftime(x, "%Y-%m-%d"), ...)))
+      } else if (all_ts & !is.na(all_ts)){
+        return(paste0('timestamp ', dbi_quote(conn, strftime(x, "%Y-%m-%d %H:%M:%OS3"), ...)))
+      }
+    }
+    return(dbi_quote(conn, x, ...))
 })
 
 #' @rdname dbQuote
 #' @export
 setMethod(
+  "dbQuoteString", c("AthenaConnection", "POSIXct"),
+  function(conn, x, ...) {
+    x <- strftime(x, "%Y-%m-%d %H:%M:%OS3")
+    paste0('timestamp ', dbi_quote(conn, x, ...))
+})
+
+#' @rdname dbQuote
+#' @export
+setMethod(
+  "dbQuoteString", c("AthenaConnection", "Date"),
+  function(conn, x, ...) {
+    paste0('date ', dbi_quote(conn, strftime(x, "%Y-%m-%d"), ...))
+  })
+
+#' @rdname dbQuote
+#' @export
+setMethod(
   "dbQuoteIdentifier", c("AthenaConnection", "SQL"),
-  getMethod("dbQuoteIdentifier", c("DBIConnection", "SQL"), asNamespace("DBI")))
+  getMethod("dbQuoteIdentifier", c("DBIConnection", "SQL"), asNamespace("DBI"))
+)
 
 #' List Athena Tables
 #'
@@ -692,16 +731,32 @@ NULL
 setMethod(
   "dbGetQuery", c("AthenaConnection", "character"),
   function(conn,
-           statement = NULL, 
+           statement, 
            statistics = FALSE,
-           unload = FALSE,
+           unload = athena_unload(),
            ...){
     con_error_msg(conn, msg = "Connection already closed.")
     stopifnot(is.logical(statistics), is.logical(unload))
-    rs <- dbSendQuery(conn, statement = statement, unload = unload)
-    if(statistics) print(dbStatistics(rs))
-    out <- dbFetch(res = rs, n = -1, ...)
-    dbClearResult(rs)
+    
+    # dbplyr v2 support: dbplyr class ident
+    if(!inherits(statement, "ident")) {
+      rs <- dbSendQuery(conn, statement = statement, unload = unload)
+      if(statistics) print(dbStatistics(rs))
+      out <- dbFetch(res = rs, n = -1, ...)
+      dbClearResult(rs)
+    } else {
+      # Create an empty table using AWS GLUE to retrieve column names
+      field_names <- athena_query_fields_ident(conn, statement)
+      empty_shell <- rep(list(character()), length(field_names))
+      names(empty_shell) <- field_names
+      
+      if(inherits(athena_option_env[["file_parser"]], "athena_data.table")){
+        out <- as.data.table(empty_shell)
+      } else {
+        as_tibble <- pkg_method("as_tibble", "tibble")
+        out <- as_tibble(empty_shell)
+      }
+    }
     return(out)
 })
 
@@ -865,7 +920,7 @@ setMethod(
   function(conn, name, ...) {
     con_error_msg(conn, msg = "Connection already closed.")
     ll <- db_detect(conn, name)
-    SQL(paste0(dbGetQuery(conn, paste0("SHOW CREATE TABLE ", ll[["dbms.name"]],".",ll[["table"]]))[[1]], collapse = "\n"))
+    SQL(paste0(dbGetQuery(conn, paste0("SHOW CREATE TABLE ", ll[["dbms.name"]],".",ll[["table"]]), unload = FALSE)[[1]], collapse = "\n"))
 })
 
 #' Simple wrapper to convert Athena backend file types
@@ -958,7 +1013,7 @@ setMethod(
      tt_sql <- paste0("CREATE TABLE ",paste0('"',unlist(strsplit(name,"\\.")),'"', collapse = '.'),
                       " ", ctas_sql_with(partition, s3.location, file.type, compress), "AS ",
                       ins,"\nWITH", with_data, "DATA", ";")
-     res <- dbExecute(conn, tt_sql)
+     res <- dbExecute(conn, tt_sql, unload = FALSE)
      dbClearResult(res)
      return(invisible(TRUE))
 })

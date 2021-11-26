@@ -219,7 +219,8 @@ cache_query = function(res){
   if(res@info$Status != "FAILED") {
     cache_append = data.table(
       "QueryId" = res@info[["QueryExecutionId"]],
-      "Query" = res@info[["Query"]],
+      # ensure query is character class when caching
+      "Query" = as.character(res@info[["Query"]]),
       "State"= res@info[["Status"]],
       "StatementType"= res@info[["StatementType"]],
       "WorkGroup" = res@info[["WorkGroup"]],
@@ -243,12 +244,11 @@ check_cache = function(query, work_group){
 }
 
 # return python error with error class
-retry_error <-
-  function(e) {
-    e <- py_last_error()$value
-    class(e) <- "error"
-    e
-  }
+retry_error <- function(e) {
+  e <- py_last_error()$value
+  class(e) <- "error"
+  return(e)
+}
 
 # If api call fails retry call
 retry_api_call <- function(expr){
@@ -385,4 +385,8 @@ db_detect <- function(conn, name){
     ll[["dbms.name"]] <- conn@info[["dbms.name"]]
     ll[["table"]] <- name}
   return(ll)
+}
+
+athena_unload = function(){
+  return(athena_option_env$athena_unload)
 }

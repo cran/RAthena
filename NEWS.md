@@ -1,3 +1,12 @@
+# RAthena 2.4.0
+## Feature:
+* Add support `dbplyr` 2.0.0 backend API.
+* Add method to set unload on a package level to allow `dplyr` to benefit from `AWS Athena unload` methods ([noctua # 174](https://github.com/DyfanJones/noctua/issues/174)).
+
+## Bug Fix:
+* Ensure `dbGetQuery`, `dbExecute`, `dbSendQuery`, `dbSendStatement` work on older versions of `R` ([noctua # 170](https://github.com/DyfanJones/noctua/issues/170)). Thanks to @tyner for identifying issue.
+* Caching would fail when statement wasn't a character ([noctua # 171](https://github.com/DyfanJones/noctua/issues/171)). Thanks to @ramnathv for identifying issue.
+
 # RAthena 2.3.0
 ## Feature:
 * Add support to [`AWS Athena UNLOAD`](https://docs.aws.amazon.com/athena/latest/ug/unload.html) ([noctua: # 160](https://github.com/DyfanJones/noctua/issues/160)). This is to take advantage of read/write speed `parquet` has to offer.
