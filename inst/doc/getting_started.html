@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', function(e) {
     </style>
 
 
+
 <style type="text/css">
   code {
     white-space: pre;
@@ -336,15 +337,15 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 <p>The <code>RAthena</code> package aims to make it easier to work with
-data stored in <a href="https://aws.amazon.com/athena/"><code>AWS
-Athena</code></a>. <code>RAthena</code> package attempts to provide
-three levels of interacting with AWS Athena:</p>
+data stored in <a href="https://aws.amazon.com/athena/"><code>AWS Athena</code></a>.
+<code>RAthena</code> package attempts to provide three levels of
+interacting with AWS Athena:</p>
 <ul>
-<li>Low - level API: This provides more finer tuning of <code>AWS
-Athena</code> backend utilising the AWS SDK <a href="https://github.com/paws-r/paws"><code>paws</code></a>. This
-includes configuring <a href="https://aws.amazon.com/about-aws/whats-new/2019/02/athena_workgroups/"><code>AWS
-Athena Work Groups</code></a> to assuming different roles within
-<code>AWS</code> when connecting to <code>AWS Athena</code>.</li>
+<li>Low - level API: This provides more finer tuning of
+<code>AWS Athena</code> backend utilising the AWS SDK <a href="https://github.com/paws-r/paws"><code>paws</code></a>. This
+includes configuring <a href="https://aws.amazon.com/about-aws/whats-new/2019/02/athena_workgroups/"><code>AWS Athena Work Groups</code></a>
+to assuming different roles within <code>AWS</code> when connecting to
+<code>AWS Athena</code>.</li>
 <li><a href="https://dbi.r-dbi.org/">DBI interface</a>: This is the
 primary goal of <code>RAthena</code>, by providing a <code>DBI</code>
 interface to <code>AWS Athena</code>. Users are able to interact with
@@ -352,15 +353,15 @@ interface to <code>AWS Athena</code>. Users are able to interact with
 have used for other Databases from R.</li>
 <li><a href="https://dbplyr.tidyverse.org/">dplyr interface</a>: As
 <code>dplyr</code> is coming more popular, <code>RAthena</code> aims to
-give <code>dplyr</code> a seamless interface into <code>AWS
-Athena</code>.</li>
+give <code>dplyr</code> a seamless interface into
+<code>AWS Athena</code>.</li>
 </ul>
 <div id="installing-rathena" class="section level1">
 <h1>Installing <code>RAthena</code>:</h1>
 <p>As <code>RAthena</code> utilising the python AWS SDK
 <code>boto3</code>, Python 3+ is required. Please install Python 3+
-either by <a href="https://www.python.org/downloads/">Python</a> or <a href="https://www.anaconda.com/products/individual">Python Anaconda</a>.
-To install <code>RAthena</code>:</p>
+either by <a href="https://www.python.org/downloads/">Python</a> or <a href="https://www.anaconda.com/products/distribution">Python
+Anaconda</a>. To install <code>RAthena</code>:</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># cran version</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">install.packages</span>(<span class="st">&quot;RAthena&quot;</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>

@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', function(e) {
     </style>
 
 
+
 <style type="text/css">
   code {
     white-space: pre;
@@ -369,10 +370,10 @@ For example:</p>
 <p>Currently <code>RAthena</code> supports the following file types
 <code>[&quot;.tsv&quot;, &quot;.csv&quot;, &quot;.parquet&quot;, &quot;json&quot;]</code>. For
 <code>parquet</code> files, the package <a href="https://arrow.apache.org/docs/r/">arrow</a> is used. This package
-will have to be installed, before data can be sent to <code>AWS
-S3</code> in <code>parquet</code> format. For <code>json</code> files,
-the package <a href="https://github.com/jeroen/jsonlite">jsonlite</a> is
-required before before data can be sent to <code>AWS S3</code>.</p>
+will have to be installed, before data can be sent to
+<code>AWS S3</code> in <code>parquet</code> format. For
+<code>json</code> files, the package <a href="https://github.com/jeroen/jsonlite">jsonlite</a> is required
+before before data can be sent to <code>AWS S3</code>.</p>
 <p><code>RAthena</code> also supports compression when uploading data to
 <code>AWS S3</code>. For delimited files (<code>&quot;.tsv&quot;</code> and
 <code>&quot;.csv&quot;</code>), <a href="https://en.wikipedia.org/wiki/Gzip">gunzip compression</a> is

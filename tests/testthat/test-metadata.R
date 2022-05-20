@@ -8,7 +8,22 @@ context("Athena Metadata")
 df_col_info <- data.frame(field_name = c("w","x","y", "z", "timestamp"),
                           type = c("timestamp", "integer", "varchar", "boolean", "varchar"), stringsAsFactors = F)
 
-con_info = c("profile_name", "s3_staging","dbms.name","work_group", "poll_interval","encryption_option","kms_key","expiration", "keyboard_interrupt","region_name", "boto3", "RAthena", "timezone")
+con_info = c(
+  "profile_name",
+  "s3_staging",
+  "dbms.name",
+  "work_group",
+  "poll_interval",
+  "encryption_option",
+  "kms_key",
+  "expiration",
+  "keyboard_interrupt",
+  "region_name",
+  "boto3",
+  "RAthena",
+  "timezone",
+  "endpoint_override"
+)
 col_info_exp = c("w","x","y", "z", "timestamp")
 
 test_that("Returning meta data",{
@@ -84,4 +99,31 @@ test_that("test connection when timezone is NULL", {
   con <- dbConnect(athena(), timezone = NULL)
   
   expect_equal(con@info$timezone, "UTC")
+})
+
+test_that("test endpoints", {
+  skip_if_no_boto()
+  skip_if_no_env()
+  
+  con1 = dbConnect(athena(), endpoint_override = "https://athena.eu-west-2.amazonaws.com/")
+  con2 = dbConnect(
+    athena(),
+    region_name = "us-east-2",
+    
+    # Change default endpoints:
+    # athena: "https://athena.us-east-2.amazonaws.com"
+    # s3: "https://s3.us-east-2.amazonaws.com"
+    # glue: "https://glue.us-east-2.amazonaws.com"
+    
+    endpoint_override = list(
+      athena = "https://athena-fips.us-east-2.amazonaws.com/",
+      s3 = "https://s3-fips.us-east-2.amazonaws.com/",
+      glue = "https://glue-fips.us-east-2.amazonaws.com/"
+    )
+  )
+
+  expect_equal(as.character(con1@ptr$Athena$meta$endpoint_url), "https://athena.eu-west-2.amazonaws.com/")
+  expect_equal(as.character(con2@ptr$Athena$meta$endpoint_url), "https://athena-fips.us-east-2.amazonaws.com/")
+  expect_equal(as.character(con2@ptr$S3$meta$endpoint_url), "https://s3-fips.us-east-2.amazonaws.com/")
+  expect_equal(as.character(con2@ptr$glue$meta$endpoint_url), "https://glue-fips.us-east-2.amazonaws.com/")
 })

@@ -14,6 +14,7 @@ RAthena_options(
   retry,
   retry_quiet,
   unload,
+  clear_s3_resource,
   verbose
 )
 }
@@ -40,6 +41,10 @@ Custom Json parsers can be provide by using a function with data frame parameter
 \item{retry_quiet}{This method is deprecated please use verbose instead.}
 
 \item{unload}{set AWS Athena unload functionality globally (default: \code{FALSE})}
+
+\item{clear_s3_resource}{Clear down `AWS Athena` `AWS S3` resource (\code{s3_staging_dir} location).
+This is useful for users that don't have the `AWS IAM role` permissions delete
+from `s3_staging_dir` (default: \code{TRUE})}
 
 \item{verbose}{print package info messages (default: \code{TRUE})}
 }

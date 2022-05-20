@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', function(e) {
     </style>
 
 
+
 <style type="text/css">
   code {
     white-space: pre;
@@ -338,19 +339,20 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <div id="intro" class="section level1">
 <h1>Intro</h1>
 <p><code>RAthena</code> now supports caching. This was originally
-inspired by <code>pyathena</code>to reduce the cost of using <code>AWS
-Athena</code>. <code>RAthena</code> however has a different caching
-method and utilities local caching in <code>R</code> environments
-instead of using AWS <code>list_query_executions</code>. This is down to
-<code>dbClearResult</code> clearing <code>AWS S3</code>’s <code>AWS
-Athena</code> output when caching is disabled.</p>
+inspired by <code>pyathena</code>to reduce the cost of using
+<code>AWS Athena</code>. <code>RAthena</code> however has a different
+caching method and utilities local caching in <code>R</code>
+environments instead of using AWS <code>list_query_executions</code>.
+This is down to <code>dbClearResult</code> clearing
+<code>AWS S3</code>’s <code>AWS Athena</code> output when caching is
+disabled.</p>
 <div id="caching-benefits" class="section level2">
 <h2>Caching benefits</h2>
 <p>By caching queries the performance of repeat queries is significantly
-improved. This is because the query is no longer sent to <code>AWS
-Athena</code>. Instead the query ID, of the repeating query, is taken
-from the R environment and the result is returned from <code>AWS
-S3</code>.</p>
+improved. This is because the query is no longer sent to
+<code>AWS Athena</code>. Instead the query ID, of the repeating query,
+is taken from the R environment and the result is returned from
+<code>AWS S3</code>.</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(DBI)</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(RAthena)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>

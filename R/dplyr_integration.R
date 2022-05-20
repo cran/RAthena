@@ -6,7 +6,7 @@
 
 #' @title S3 implementation of \code{db_compute} for Athena
 #' 
-#' This is a backend function for dplyr's \code{compute} function. Users won't be required to access and run this function.
+#' @description This is a backend function for dplyr's \code{compute} function. Users won't be required to access and run this function.
 #' @param con A \code{\link{dbConnect}} object, as returned by \code{dbConnect()}
 #' @param table Table name, if left default RAthena will use the default from \code{dplyr}'s \code{compute} function.
 #' @param sql SQL code to be sent to the data
@@ -332,9 +332,9 @@ athena_query_fields_ident <- function(con, sql){
   }
   # If dbplyr schema, get the fields from Glue
   tryCatch(
-    output <- con@ptr$glue$get_table(
+    output <- py_to_r(con@ptr$glue$get_table(
       DatabaseName = schema_parts[1],
-      Name = schema_parts[2])$Table
+      Name = schema_parts[2]))$Table
   )
   col_names = vapply(output$StorageDescriptor$Columns, function(y) y$Name, FUN.VALUE = character(1))
   partitions = vapply(output$PartitionKeys,function(y) y$Name, FUN.VALUE = character(1))

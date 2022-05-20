@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', function(e) {
     </style>
 
 
+
 <style type="text/css">
   code {
     white-space: pre;
@@ -520,13 +521,13 @@ will use it when applicable.</p>
 <span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>dbi_noaa <span class="ot">=</span> <span class="fu">dbGetQuery</span>(con, <span class="st">&quot;select * from awswrangler_test.noaa&quot;</span>)</span></code></pre></div>
 <p>This also give benefits for when using <code>dplyr</code>
 functionality. When setting <code>RAthena_options(unload=TRUE)</code>
-all <code>dplyr</code> lazy evaluation will start using <code>AWS Athena
-unload</code>.</p>
+all <code>dplyr</code> lazy evaluation will start using
+<code>AWS Athena unload</code>.</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>tbl_noaa <span class="ot">=</span> <span class="fu">tbl</span>(con, dbplyr<span class="sc">::</span><span class="fu">in_schema</span>(<span class="st">&quot;awswrangler_test&quot;</span>, <span class="st">&quot;noaa&quot;</span>))</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>tbl_noaa <span class="sc">%&gt;%</span> <span class="fu">collect</span>()</span>
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; # A tibble: 29,554,197 × 8</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; # A tibble: 29,554,197 x 8</span></span>
 <span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;    id          dt                  element value m_flag q_flag s_flag obs_time</span></span>
 <span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;    &lt;chr&gt;       &lt;dttm&gt;              &lt;chr&gt;   &lt;int&gt; &lt;chr&gt;  &lt;chr&gt;  &lt;chr&gt;  &lt;chr&gt;   </span></span>
 <span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;  1 ASN00074198 1890-01-05 00:00:00 PRCP        0 NA     NA     a      NA      </span></span>
@@ -539,10 +540,10 @@ unload</code>.</p>
 <span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;  8 ASN00075013 1890-01-05 00:00:00 PRCP        0 NA     NA     a      NA      </span></span>
 <span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;  9 ASN00075014 1890-01-05 00:00:00 PRCP        0 NA     NA     a      NA      </span></span>
 <span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; 10 ASN00075018 1890-01-05 00:00:00 PRCP        0 NA     NA     a      NA      </span></span>
-<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; # … with 29,554,187 more rows</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; # ... with 29,554,187 more rows</span></span>
 <span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>noaa <span class="sc">%&gt;%</span> <span class="fu">filter</span>(element <span class="sc">==</span> <span class="st">&quot;PRCP&quot;</span>) <span class="sc">%&gt;%</span> <span class="fu">collect</span>()</span>
-<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; # A tibble: 15,081,580 × 8</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; # A tibble: 15,081,580 x 8</span></span>
 <span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;    id          dt                  element value m_flag q_flag s_flag obs_time</span></span>
 <span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;    &lt;chr&gt;       &lt;dttm&gt;              &lt;chr&gt;   &lt;int&gt; &lt;chr&gt;  &lt;chr&gt;  &lt;chr&gt;  &lt;chr&gt;   </span></span>
 <span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;  1 SWE00140492 1890-01-06 00:00:00 PRCP        0 NA     NA     E      NA      </span></span>
@@ -555,7 +556,7 @@ unload</code>.</p>
 <span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;  8 TSE00147769 1890-01-06 00:00:00 PRCP       33 NA     NA     E      NA      </span></span>
 <span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;  9 TSE00147775 1890-01-06 00:00:00 PRCP      150 NA     NA     E      NA      </span></span>
 <span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; 10 UK000047811 1890-01-06 00:00:00 PRCP       49 NA     NA     E      NA      </span></span>
-<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a><span class="co"># … with 15,081,570 more rows</span></span></code></pre></div>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; # ... with 15,081,570 more rows</span></span></code></pre></div>
 </div>
 
 
